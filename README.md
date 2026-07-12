@@ -2,7 +2,7 @@
 
 <div align="center">
 
-# 🛡️ Project HATA
+# 🛡️ Operation HATA
 ### Hidden Attachment Threat Analyzer
 
 <img src="https://readme-typing-svg.demolab.com?font=Fira+Code&size=26&duration=3000&pause=1000&color=00E5FF&center=true&vCenter=true&width=900&lines=AI-Powered+Email+Image+Forensics;Detect+Hidden+Threats+Inside+Image+Attachments;Steganography+%7C+Metadata+%7C+YARA+%7C+AI+Risk+Scoring" />
@@ -22,7 +22,7 @@
 
 # 📖 Overview
 
-**Project HATA (Hidden Attachment Threat Analyzer)** is an AI-powered digital forensic framework that automatically inspects incoming email image attachments before they reach the user.
+**Operation HATA (Hidden Attachment Threat Analyzer)** is an AI-powered digital forensic framework that automatically inspects incoming email image attachments before they reach the user.
 
 Unlike traditional antivirus solutions that mainly rely on malware signatures, HATA combines multiple forensic analysis techniques to uncover hidden threats such as:
 
@@ -118,7 +118,7 @@ After completing all analysis stages, HATA generates a report containing:
 
 Traditional security tools usually perform only one or two checks.
 
-Project HATA integrates multiple forensic techniques into one intelligent framework.
+Operation HATA integrates multiple forensic techniques into one intelligent framework.
 
 ✔ Signature Verification
 
@@ -177,7 +177,7 @@ Project HATA integrates multiple forensic techniques into one intelligent framew
 
 <div align="center">
 
-# 🛡️ Project HATA
+# 🛡️ Operation HATA
 
 ### Hidden Attachment Threat Analyzer
 
