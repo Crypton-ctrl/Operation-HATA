@@ -1,0 +1,11 @@
+venv/
+__pycache__/
+*.pyc
+.env
+hata.db
+quarantine/*
+!quarantine/.gitkeep
+reports/*
+!reports/.gitkeep
+.pytest_cache/
+*.egg-info/
