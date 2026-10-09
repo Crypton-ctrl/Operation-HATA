@@ -247,6 +247,54 @@ def list_users(db: Session = Depends(get_db), _: bool = Depends(_check_auth)):
     return [serialize_user(u) for u in users]
 
 
+class UpdateRoleRequest(BaseModel):
+    role: str
+
+@router.delete("/users/{user_id}")
+def delete_user(user_id: str, authorization: str | None = Header(default=None), db: Session = Depends(get_db)):
+    token = _extract_token(authorization)
+    if not token or token not in _sessions:
+        raise HTTPException(status_code=401, detail="Not authenticated.")
+    
+    current_user_id = _sessions[token]
+    current_user = db.query(m.User).filter_by(id=current_user_id).first()
+    
+    if not current_user or current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="Only admins can perform this action.")
+    if current_user.id == user_id:
+        raise HTTPException(status_code=400, detail="Cannot delete your own account.")
+        
+    target = db.query(m.User).filter_by(id=user_id).first()
+    if not target:
+        raise HTTPException(status_code=404, detail="User not found.")
+        
+    db.delete(target)
+    db.commit()
+    return {"status": "deleted"}
+
+@router.put("/users/{user_id}/role")
+def update_user_role(user_id: str, payload: UpdateRoleRequest, authorization: str | None = Header(default=None), db: Session = Depends(get_db)):
+    token = _extract_token(authorization)
+    if not token or token not in _sessions:
+        raise HTTPException(status_code=401, detail="Not authenticated.")
+    
+    current_user_id = _sessions[token]
+    current_user = db.query(m.User).filter_by(id=current_user_id).first()
+    
+    if not current_user or current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="Only admins can perform this action.")
+    if current_user.id == user_id:
+        raise HTTPException(status_code=400, detail="Cannot change your own role.")
+        
+    target = db.query(m.User).filter_by(id=user_id).first()
+    if not target:
+        raise HTTPException(status_code=404, detail="User not found.")
+        
+    target.role = payload.role
+    db.commit()
+    db.refresh(target)
+    return serialize_user(target)
+
 @router.post("/logout")
 def logout(authorization: str | None = Header(default=None)):
     token = _extract_token(authorization)
