@@ -1,9 +1,10 @@
 import { NavLink } from 'react-router-dom'
 import {
   LayoutDashboard, Mail, ScanLine, History, ShieldAlert, FileText,
-  Lock, BrainCircuit, Settings as SettingsIcon,
+  Lock, BrainCircuit, Settings as SettingsIcon, Users
 } from 'lucide-react'
 import HataLogo from './HataLogo.jsx'
+import { useAuth } from '../../context/AuthContext.jsx'
 
 const NAV_ITEMS = [
   { to: '/', label: 'Dashboard', icon: LayoutDashboard, end: true },
@@ -17,6 +18,8 @@ const NAV_ITEMS = [
 ]
 
 export default function Sidebar() {
+  const { user } = useAuth()
+
   return (
     <aside className="hidden md:flex md:flex-col w-64 shrink-0 h-screen sticky top-0 border-r border-hata-border bg-hata-panel/60 backdrop-blur-md">
       <div className="px-5 py-5 border-b border-hata-border">
@@ -40,6 +43,21 @@ export default function Sidebar() {
             <span>{label}</span>
           </NavLink>
         ))}
+        {user?.role === 'admin' && (
+          <NavLink
+            to="/admin"
+            className={({ isActive }) =>
+              `focus-ring flex items-center gap-3 px-3 py-2.5 mt-4 rounded-lg text-sm font-medium transition-colors ${
+                isActive
+                  ? 'bg-hata-accent/10 text-hata-accent border border-hata-accent/30'
+                  : 'text-hata-muted hover:text-hata-text hover:bg-white/5 border border-transparent'
+              }`
+            }
+          >
+            <Users className="w-4 h-4 shrink-0" />
+            <span>System Admin</span>
+          </NavLink>
+        )}
       </nav>
       <div className="p-4 border-t border-hata-border text-[11px] text-hata-muted">
         <div className="flex items-center gap-2">

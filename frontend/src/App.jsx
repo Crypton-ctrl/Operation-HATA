@@ -18,6 +18,7 @@ import Reports from './pages/Reports.jsx'
 import Quarantine from './pages/Quarantine.jsx'
 import ThreatIntelligence from './pages/ThreatIntelligence.jsx'
 import Settings from './pages/Settings.jsx'
+import AdminPanel from './pages/AdminPanel.jsx'
 
 const PAGE_META = {
   '/': { title: 'Security Dashboard', subtitle: 'AI-Powered Attachment Security Overview' },
@@ -28,6 +29,7 @@ const PAGE_META = {
   '/reports': { title: 'Reports', subtitle: 'AI-generated security reports' },
   '/quarantine': { title: 'Quarantine', subtitle: 'Isolated suspicious and dangerous attachments' },
   '/settings': { title: 'Settings', subtitle: 'Email, AI, scanner, and notification configuration' },
+  '/admin': { title: 'System Administration', subtitle: 'Operator and access management' },
 }
 
 function PageTransition({ children }) {
@@ -81,6 +83,7 @@ function AppContent() {
               <Route path="/reports" element={<Shell {...PAGE_META['/reports']} onLogout={logout}><Reports /></Shell>} />
               <Route path="/quarantine" element={<Shell {...PAGE_META['/quarantine']} onLogout={logout}><Quarantine /></Shell>} />
               <Route path="/settings" element={<Shell {...PAGE_META['/settings']} onLogout={logout}><Settings /></Shell>} />
+              <Route path="/admin" element={<Shell {...PAGE_META['/admin']} onLogout={logout}><AdminPanel /></Shell>} />
             </Routes>
           </BrowserRouter>
         </NotificationProvider>
