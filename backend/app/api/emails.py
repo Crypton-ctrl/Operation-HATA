@@ -34,7 +34,7 @@ def get_google_flow():
     return flow
 
 @router.get("/status")
-def email_status(db: Session = Depends(get_db)):
+def email_status(db: Session = Depends(get_db), _: bool = require_auth):
     account = db.query(m.EmailAccount).first()
     if not account:
         return {

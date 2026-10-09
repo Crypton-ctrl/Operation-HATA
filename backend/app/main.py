@@ -75,7 +75,7 @@ async def unhandled_exception_handler(request: Request, exc: Exception):
 app.include_router(auth.router)
 app.include_router(scans.router, dependencies=[require_auth])
 app.include_router(dashboard.router, dependencies=[require_auth])
-app.include_router(emails.router, dependencies=[require_auth])
+app.include_router(emails.router)
 app.include_router(quarantine.router, dependencies=[require_auth])
 app.include_router(notifications.router, dependencies=[require_auth])
 app.include_router(settings_api.router, dependencies=[require_auth])
