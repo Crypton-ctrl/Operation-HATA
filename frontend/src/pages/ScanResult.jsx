@@ -99,7 +99,7 @@ export default function ScanResult() {
               <div><span className="font-semibold text-hata-text">Assessment: </span>{ai_report?.assessment}</div>
               <div><span className="font-semibold text-hata-text">Likely Scenario: </span>{ai_report?.likely_scenario}</div>
               <div><span className="font-semibold text-hata-text">Recommendation: </span>{ai_report?.recommendation}</div>
-              <div><span className="font-semibold text-hata-text">Confidence: </span>{ai_report?.confidence}</div>
+              <div><span className="font-semibold text-hata-text">AI Accuracy: </span>{ai_report?.confidence}</div>
             </div>
             <p className="text-[11px] text-hata-muted mt-3 italic">{ai_report?.limitations}</p>
           </div>

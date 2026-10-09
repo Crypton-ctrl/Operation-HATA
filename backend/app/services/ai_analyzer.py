@@ -41,7 +41,7 @@ Respond ONLY with a JSON object with these exact keys (all strings):
   "assessment": "detailed explanation of what was detected and why it matters",
   "likely_scenario": "plausible attack scenario, or 'No specific attack scenario is indicated by current evidence.'",
   "recommendation": "clear recommended action",
-  "confidence": "one of: Low, Medium, High - plus a short reason",
+  "confidence": "an estimated accuracy percentage (e.g., 90%) - plus a short reason",
   "limitations": "short statement of what this analysis cannot guarantee"
 }
 No markdown, no code fences, JSON only."""
