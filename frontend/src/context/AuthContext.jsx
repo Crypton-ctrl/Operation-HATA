@@ -43,6 +43,10 @@ export function AuthProvider({ children }) {
     return () => window.removeEventListener('hata-unauthorized', unauthorizedHandler)
   }, [])
 
+  const mapLegacyTheme = (t) => {
+    return ['netflix', 'cyber', 'matrix', 'midnight'].includes(t) ? 'dark' : t
+  }
+
   const handleLogin = async (username, password) => {
     setLoading(true)
     try {
@@ -53,8 +57,10 @@ export function AuthProvider({ children }) {
         setUser(res.user)
         sessionStorage.setItem('hata_user', JSON.stringify(res.user))
         if (res.user.theme_preference) {
-          localStorage.setItem('hata_theme', res.user.theme_preference)
-          document.documentElement.setAttribute('data-theme', res.user.theme_preference)
+          const themeName = mapLegacyTheme(res.user.theme_preference)
+          localStorage.setItem('hata_theme', themeName)
+          document.documentElement.setAttribute('data-theme', themeName)
+          window.dispatchEvent(new Event('hata-theme-changed'))
         }
       }
       return res
@@ -73,8 +79,10 @@ export function AuthProvider({ children }) {
         setUser(res.user)
         sessionStorage.setItem('hata_user', JSON.stringify(res.user))
         if (res.user.theme_preference) {
-          localStorage.setItem('hata_theme', res.user.theme_preference)
-          document.documentElement.setAttribute('data-theme', res.user.theme_preference)
+          const themeName = mapLegacyTheme(res.user.theme_preference)
+          localStorage.setItem('hata_theme', themeName)
+          document.documentElement.setAttribute('data-theme', themeName)
+          window.dispatchEvent(new Event('hata-theme-changed'))
         }
       }
       return res

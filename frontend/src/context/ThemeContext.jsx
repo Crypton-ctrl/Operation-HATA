@@ -33,6 +33,17 @@ export function ThemeProvider({ children }) {
   })
 
   useEffect(() => {
+    const handleThemeChange = () => {
+      const stored = localStorage.getItem('hata_theme')
+      if (stored && stored !== theme) {
+        setThemeState(stored)
+      }
+    }
+    window.addEventListener('hata-theme-changed', handleThemeChange)
+    return () => window.removeEventListener('hata-theme-changed', handleThemeChange)
+  }, [theme])
+
+  useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme)
     localStorage.setItem('hata_theme', theme)
   }, [theme])
