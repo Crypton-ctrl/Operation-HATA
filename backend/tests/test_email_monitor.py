@@ -5,6 +5,8 @@ from email.mime.multipart import MIMEMultipart
 from email.mime.image import MIMEImage
 from email.mime.text import MIMEText
 from unittest.mock import patch, MagicMock
+import base64
+import json
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
@@ -16,16 +18,24 @@ from app.utils.crypto import encrypt_credential
 Base.metadata.create_all(bind=engine)
 
 async def test_email_monitor_pipeline():
-    print("Testing Automated Email Monitoring Pipeline...")
+    print("Testing Automated Email Monitoring Pipeline (OAuth2)...")
     db = SessionLocal()
     try:
         account = db.query(m.EmailAccount).first()
+        creds_json = json.dumps({
+            'token': 'test_token',
+            'refresh_token': 'test_refresh',
+            'token_uri': 'https://oauth2.googleapis.com/token',
+            'client_id': 'test_client_id',
+            'client_secret': 'test_client_secret',
+            'scopes': ['https://www.googleapis.com/auth/gmail.readonly']
+        })
         if not account:
             account = m.EmailAccount(
                 email_address="soc-test@gmail.com",
                 provider="gmail",
-                auth_method="imap_app_password",
-                encrypted_credential=encrypt_credential("fake-app-password-16char"),
+                auth_method="oauth2",
+                encrypted_credential=encrypt_credential(creds_json),
                 connected=True,
                 monitoring_active=True
             )
@@ -34,32 +44,49 @@ async def test_email_monitor_pipeline():
             db.refresh(account)
         else:
             account.connected = True
-            account.encrypted_credential = encrypt_credential("fake-app-password-16char")
+            account.encrypted_credential = encrypt_credential(creds_json)
             db.commit()
 
-        msg = MIMEMultipart()
-        msg["From"] = "suspicious-sender@external-domain.com"
-        msg["To"] = "soc-test@gmail.com"
-        msg["Subject"] = "Urgent: Wire Transfer Invoice Attached"
-        msg["Message-ID"] = f"<test-{asyncio.get_event_loop().time()}@external-domain.com>"
-        msg.attach(MIMEText("Please find the attached invoice.", "plain"))
-
         png_bytes = b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01\x08\x06\x00\x00\x00\x1f\x15\xc4\x89\x00\x00\x00\x00IEND\xae\x42\x60\x82"
-        img_part = MIMEImage(png_bytes, _subtype="png", name="invoice.png")
-        img_part.add_header("Content-Disposition", "attachment", filename="invoice.png")
-        msg.attach(img_part)
+        b64_png = base64.urlsafe_b64encode(png_bytes).decode('utf-8')
 
-        raw_rfc822 = msg.as_bytes()
+        mock_service = MagicMock()
+        mock_messages = mock_service.users().messages()
+        
+        # Mock messages().list()
+        mock_list_req = MagicMock()
+        mock_list_req.execute.return_value = {'messages': [{'id': 'msg1'}]}
+        mock_messages.list.return_value = mock_list_req
+        
+        # Mock messages().get()
+        mock_get_req = MagicMock()
+        mock_get_req.execute.return_value = {
+            'id': 'msg1',
+            'payload': {
+                'headers': [
+                    {'name': 'Message-ID', 'value': f'<test-{asyncio.get_event_loop().time()}@external.com>'},
+                    {'name': 'From', 'value': 'suspicious-sender@external-domain.com'},
+                    {'name': 'Subject', 'value': 'Urgent: Wire Transfer Invoice Attached'}
+                ],
+                'parts': [
+                    {
+                        'filename': 'invoice.png',
+                        'mimeType': 'image/png',
+                        'body': {'attachmentId': 'att1'}
+                    }
+                ]
+            }
+        }
+        mock_messages.get.return_value = mock_get_req
+        
+        # Mock attachments().get()
+        mock_att_req = MagicMock()
+        mock_att_req.execute.return_value = {'data': b64_png}
+        mock_messages.attachments().get.return_value = mock_att_req
 
-        mock_imap = MagicMock()
-        mock_imap.login.return_value = ("OK", [b"Logged in"])
-        mock_imap.select.return_value = ("OK", [b"1"])
-        mock_imap.search.return_value = ("OK", [b"1"])
-        mock_imap.fetch.return_value = ("OK", [(b"1 (RFC822 {1234})", raw_rfc822)])
-        mock_imap.logout.return_value = ("OK", [b"Logged out"])
-
-        with patch("imaplib.IMAP4_SSL", return_value=mock_imap):
-            await email_monitor._poll_once(account.id)
+        with patch("app.services.email_monitor.build", return_value=mock_service):
+            with patch("app.services.email_monitor.Credentials"):
+                await email_monitor._poll_once(account.id)
 
         scan = db.query(m.Scan).filter_by(source="automatic").order_by(m.Scan.started_at.desc()).first()
         assert scan is not None, "Scan should be created automatically by email monitor"

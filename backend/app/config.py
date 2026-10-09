@@ -24,8 +24,7 @@ class Settings(BaseSettings):
     GMAIL_CLIENT_SECRET: str = ""
     GMAIL_REDIRECT_URI: str = "http://localhost:8000/api/emails/oauth/callback"
 
-    IMAP_HOST: str = "imap.gmail.com"
-    IMAP_PORT: int = 993
+
 
     AI_PROVIDER: str = "anthropic"
     AI_API_KEY: str = ""

@@ -1,24 +1,17 @@
 """
 Email Monitor
-Connects to Gmail via IMAP (using an encrypted app-password credential) to
-detect new emails with image attachments, deduplicates using the provider's
-Message-ID header plus attachment SHA-256, downloads attachments into the
-secure quarantine directory, and kicks off the standard analysis pipeline.
-
-Gmail API/OAuth2 is the preferred integration per the architecture and the
-credential storage model below already supports it (encrypted refresh
-tokens) - swap `_fetch_via_imap` for a Gmail API client when OAuth
-credentials are configured. This keeps the rest of the pipeline identical.
+Connects to Gmail via Gmail API to detect new emails with image attachments.
+Deduplicates using Message-ID and attachment SHA-256.
 """
 import asyncio
-import email
-import imaplib
+import base64
+import json
 import logging
 from datetime import datetime
-from email.header import decode_header
 from sqlalchemy.orm import Session
+from google.oauth2.credentials import Credentials
+from googleapiclient.discovery import build
 
-from app.config import get_settings
 from app.database.session import SessionLocal
 from app.models import models as m
 from app.utils.crypto import decrypt_credential
@@ -26,23 +19,9 @@ from app.services.attachment_manager import save_bytes_to_quarantine, new_scan_i
 from app.services.scan_orchestrator import run_full_scan
 from app.services.ws_manager import manager
 
-settings = get_settings()
 logger = logging.getLogger("hata.email_monitor")
 
 _monitor_tasks: dict[str, asyncio.Task] = {}
-
-
-def _decode(value) -> str:
-    if not value:
-        return ""
-    parts = decode_header(value)
-    out = []
-    for text, enc in parts:
-        if isinstance(text, bytes):
-            out.append(text.decode(enc or "utf-8", errors="replace"))
-        else:
-            out.append(text)
-    return "".join(out)
 
 
 def _get_settings_row(db: Session) -> m.UserSettings:
@@ -54,6 +33,19 @@ def _get_settings_row(db: Session) -> m.UserSettings:
         db.refresh(row)
     return row
 
+def get_gmail_service(account: m.EmailAccount):
+    if not account.encrypted_credential:
+        return None
+    try:
+        creds_json = decrypt_credential(account.encrypted_credential)
+        creds_data = json.loads(creds_json)
+        creds = Credentials(**creds_data)
+        service = build('gmail', 'v1', credentials=creds)
+        return service
+    except Exception as e:
+        logger.error(f"Failed to build gmail service: {e}")
+        return None
+
 
 async def _poll_once(account_id: str):
     db = SessionLocal()
@@ -62,46 +54,30 @@ async def _poll_once(account_id: str):
         if not account or not account.connected:
             return
 
-        if not account.encrypted_credential:
-            logger.warning("No credential stored for account %s", account_id)
+        service = get_gmail_service(account)
+        if not service:
             return
-
-        try:
-            app_password = decrypt_credential(account.encrypted_credential)
-        except Exception:
-            logger.error("Failed to decrypt credential for account %s", account_id)
-            return
-
-        try:
-            imap = imaplib.IMAP4_SSL(settings.IMAP_HOST, settings.IMAP_PORT)
-            imap.login(account.email_address, app_password)
-            imap.select("INBOX")
-        except Exception as exc:
-            logger.error("IMAP connection failed: %s", exc)
-            account.connected = False
-            db.commit()
-            return
-
-        status, data = imap.search(None, "UNSEEN")
-        message_ids = data[0].split() if status == "OK" else []
 
         settings_row = _get_settings_row(db)
 
-        for msg_num in message_ids[-25:]:  # cap per poll cycle
-            status, msg_data = imap.fetch(msg_num, "(RFC822)")
-            if status != "OK":
-                continue
-            raw_email = msg_data[0][1]
-            parsed = email.message_from_bytes(raw_email)
+        # Get list of unread messages
+        results = service.users().messages().list(userId='me', q="is:unread has:attachment").execute()
+        messages = results.get('messages', [])
 
-            provider_message_id = parsed.get("Message-ID", f"no-id-{msg_num}")
+        for msg_ref in messages[:25]:
+            msg_id = msg_ref['id']
+            msg = service.users().messages().get(userId='me', id=msg_id).execute()
+            
+            headers = msg['payload'].get('headers', [])
+            provider_message_id = next((h['value'] for h in headers if h['name'].lower() == 'message-id'), msg_id)
+            
             existing = db.query(m.Email).filter_by(message_id=provider_message_id).first()
             if existing:
-                continue  # already processed - dedup by Message-ID
+                # Optional: mark as read if you want, but for now just skip
+                continue
 
-            sender = _decode(parsed.get("From"))
-            subject = _decode(parsed.get("Subject"))
-            date_hdr = parsed.get("Date")
+            sender = next((h['value'] for h in headers if h['name'].lower() == 'from'), "Unknown")
+            subject = next((h['value'] for h in headers if h['name'].lower() == 'subject'), "No Subject")
 
             email_row = m.Email(
                 account_id=account.id, message_id=provider_message_id,
@@ -109,32 +85,46 @@ async def _poll_once(account_id: str):
             )
             db.add(email_row)
             db.flush()
-
+            
             account.emails_checked += 1
             image_found = False
 
-            for part in parsed.walk():
-                if part.get_content_maintype() == "multipart":
-                    continue
-                filename = part.get_filename()
-                if not filename:
-                    continue
-                filename = _decode(filename)
-                content_type = part.get_content_type()
-                from pathlib import Path
-                from app.utils.security import ALLOWED_EXTENSIONS
+            # Function to recursively find parts
+            parts_to_process = []
+            def extract_parts(parts):
+                for part in parts:
+                    if part.get('parts'):
+                        extract_parts(part['parts'])
+                    elif part.get('filename') and part.get('body', {}).get('attachmentId'):
+                        parts_to_process.append(part)
+
+            if 'parts' in msg['payload']:
+                extract_parts(msg['payload']['parts'])
+                
+            from pathlib import Path
+            from app.utils.security import ALLOWED_EXTENSIONS
+
+            for part in parts_to_process:
+                filename = part['filename']
+                content_type = part.get('mimeType', '')
                 ext = Path(filename).suffix.lower()
+                
                 is_image_mime = bool(content_type and content_type.startswith("image/"))
                 is_image_ext = ext in ALLOWED_EXTENSIONS
                 if not (is_image_mime or is_image_ext):
                     continue
 
-                payload = part.get_payload(decode=True)
-                if not payload:
+                attachment_id = part['body']['attachmentId']
+                attachment_obj = service.users().messages().attachments().get(
+                    userId='me', messageId=msg_id, id=attachment_id
+                ).execute()
+                
+                file_data = base64.urlsafe_b64decode(attachment_obj['data'])
+                if not file_data:
                     continue
 
                 scan_id = new_scan_id()
-                saved = save_bytes_to_quarantine(payload, filename, scan_id)
+                saved = save_bytes_to_quarantine(file_data, filename, scan_id)
                 if not saved:
                     continue
 
@@ -159,16 +149,22 @@ async def _poll_once(account_id: str):
                     "filename": attachment.original_filename, "sender": sender,
                 })
 
-                from pathlib import Path
                 await run_full_scan(db, scan, Path(saved["stored_path"]), attachment, settings_row, email_row)
 
             email_row.has_image_attachments = image_found
             email_row.processed = True
             db.commit()
 
+            # Mark message as read so we don't process it again (optional but good practice)
+            try:
+                service.users().messages().modify(
+                    userId='me', id=msg_id, body={'removeLabelIds': ['UNREAD']}
+                ).execute()
+            except Exception:
+                pass
+
         account.last_sync_at = datetime.utcnow()
         db.commit()
-        imap.logout()
 
     except Exception as exc:  # noqa: BLE001
         logger.error("Email poll failed: %s", exc)

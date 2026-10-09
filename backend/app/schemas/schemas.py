@@ -7,10 +7,7 @@ from pydantic import BaseModel, EmailStr
 from typing import Optional, Dict, Any
 
 
-class EmailConnectRequest(BaseModel):
-    email_address: EmailStr
-    app_password: str
-    provider: str = "gmail"
+
 
 
 class MonitoringIntervalRequest(BaseModel):
