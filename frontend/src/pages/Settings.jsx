@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react'
 import {
   Save, Bot, SlidersHorizontal, Bell, KeyRound, Palette,
-  Tv, Volume2, VolumeX, Check, User, Shield, Sparkles
+  Check, User, Shield, Sparkles
 } from 'lucide-react'
 import { getSettings, updateSettings } from '../services/api.js'
 import ErrorPanel from '../components/common/ErrorPanel.jsx'
@@ -20,7 +20,7 @@ export default function Settings() {
   const [saved, setSaved] = useState(false)
   const [error, setError] = useState(null)
 
-  const { theme, setTheme, themes, soundEnabled, toggleSound, triggerIntro } = useTheme()
+  const { theme, setTheme, themes } = useTheme()
   const { user, syncThemeWithProfile } = useAuth()
 
   const load = () => {
@@ -101,19 +101,12 @@ export default function Settings() {
             <Palette className="w-5 h-5 text-hata-accent" />
             <h3 className="font-semibold text-hata-text">Theme Management</h3>
           </div>
-          <button
-            onClick={triggerIntro}
-            className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold bg-red-600/20 text-red-400 border border-red-500/40 hover:bg-red-600 hover:text-white transition-all shadow-sm"
-          >
-            <Tv className="w-3.5 h-3.5" />
-            <span>Play Netflix Pop</span>
-          </button>
         </div>
         <p className="text-xs text-hata-muted mb-4">
           Personalize the SOC workstation display. Themes update color palettes, glowing borders, and visual hierarchy instantly.
         </p>
 
-        {/* 5 Theme Cards */}
+        {/* 2 Theme Cards */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
           {themes.map((t) => {
             const isSelected = theme === t.id
@@ -162,31 +155,6 @@ export default function Settings() {
               </div>
             )
           })}
-        </div>
-
-        {/* Cinematic Audio Options */}
-        <div className="mt-5 pt-4 border-t border-hata-border/70 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            {soundEnabled ? (
-              <Volume2 className="w-4 h-4 text-hata-accent" />
-            ) : (
-              <VolumeX className="w-4 h-4 text-hata-muted" />
-            )}
-            <div>
-              <p className="text-xs font-semibold text-hata-text">Netflix Intro "Ta-Dum" Audio</p>
-              <p className="text-[11px] text-hata-muted">Play synthesized cinema chord during startup pop</p>
-            </div>
-          </div>
-          <button
-            onClick={toggleSound}
-            className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all border ${
-              soundEnabled
-                ? 'bg-hata-accent/15 text-hata-accent border-hata-accent/40'
-                : 'bg-white/5 text-hata-muted border-hata-border hover:text-hata-text'
-            }`}
-          >
-            {soundEnabled ? 'Enabled' : 'Muted'}
-          </button>
         </div>
       </section>
 

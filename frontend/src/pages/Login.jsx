@@ -9,8 +9,6 @@ import { useTheme } from '../context/ThemeContext.jsx'
 
 export default function Login({ onSuccess }) {
   const { login, register } = useAuth()
-  const { triggerIntro } = useTheme()
-
   const [mode, setMode] = useState('login') // 'login' | 'register'
   const [showPassword, setShowPassword] = useState(false)
 
@@ -76,17 +74,6 @@ export default function Login({ onSuccess }) {
             'radial-gradient(circle at 20% 20%, rgba(var(--hata-glow), 0.2), transparent 45%), radial-gradient(circle at 80% 80%, rgba(var(--hata-glow), 0.15), transparent 45%)',
         }}
       />
-
-      {/* Floating replay intro pop button in top right */}
-      <div className="absolute top-6 right-6 z-20">
-        <button
-          onClick={triggerIntro}
-          className="flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-semibold bg-red-600/20 text-red-400 border border-red-500/40 hover:bg-red-600 hover:text-white transition-all shadow-[0_0_15px_rgba(229,9,20,0.3)] backdrop-blur-md"
-        >
-          <Tv className="w-3.5 h-3.5" />
-          <span>Netflix Intro Pop</span>
-        </button>
-      </div>
 
       <motion.div
         initial={{ opacity: 0, y: 18 }}

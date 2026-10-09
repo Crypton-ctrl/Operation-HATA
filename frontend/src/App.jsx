@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import Sidebar from './components/layout/Sidebar.jsx'
 import TopNav from './components/layout/TopNav.jsx'
 import Login from './pages/Login.jsx'
-import NetflixIntro from './components/common/NetflixIntro.jsx'
+
 import { NotificationProvider } from './context/NotificationContext.jsx'
 import { ThemeProvider, useTheme } from './context/ThemeContext.jsx'
 import { AuthProvider, useAuth } from './context/AuthContext.jsx'
@@ -63,27 +63,9 @@ function Shell({ children, title, subtitle, onLogout }) {
 
 function AppContent() {
   const { isAuthenticated, logout } = useAuth()
-  const { showIntro, closeIntro } = useTheme()
-
-  // First-launch Netflix pop intro check
-  const [initialIntro, setInitialIntro] = useState(() => {
-    return !sessionStorage.getItem('hata_intro_seen')
-  })
-
-  const handleIntroComplete = () => {
-    sessionStorage.setItem('hata_intro_seen', 'true')
-    setInitialIntro(false)
-    closeIntro()
-  }
 
   return (
     <>
-      <AnimatePresence>
-        {(initialIntro || showIntro) && (
-          <NetflixIntro onComplete={handleIntroComplete} />
-        )}
-      </AnimatePresence>
-
       {!isAuthenticated ? (
         <Login onSuccess={() => {}} />
       ) : (

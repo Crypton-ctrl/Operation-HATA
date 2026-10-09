@@ -13,7 +13,7 @@ const SEVERITY_TO_CATEGORY = { critical: 'CRITICAL', high: 'HIGH', medium: 'MEDI
 export default function TopNav({ title, subtitle, onLogout }) {
   const { notifications, unreadCount, markAllRead, socketConnected } = useNotifications()
   const { user } = useAuth()
-  const { theme, setTheme, themes, currentThemeMeta, triggerIntro } = useTheme()
+  const { theme, setTheme, themes, currentThemeMeta } = useTheme()
 
   const [notifOpen, setNotifOpen] = useState(false)
   const [themeOpen, setThemeOpen] = useState(false)
@@ -43,21 +43,6 @@ export default function TopNav({ title, subtitle, onLogout }) {
       </div>
 
       <div className="flex items-center gap-2.5 shrink-0">
-        {/* Connection status */}
-        <div className="hidden lg:flex items-center gap-1.5 text-[11px] px-2.5 py-1 rounded-full border border-hata-border text-hata-muted">
-          {socketConnected ? <Wifi className="w-3 h-3 text-risk-safe" /> : <WifiOff className="w-3 h-3 text-risk-critical" />}
-          {socketConnected ? 'Live SOC' : 'Reconnecting'}
-        </div>
-
-        {/* Netflix Pop Button */}
-        <button
-          onClick={triggerIntro}
-          title="Play Netflix-style intro animation"
-          className="focus-ring flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-red-500/40 text-red-400 hover:bg-red-600/10 hover:border-red-500 transition-all text-xs font-semibold"
-        >
-          <Tv className="w-3.5 h-3.5 text-red-500" />
-          <span className="hidden sm:inline">Intro Pop</span>
-        </button>
 
         {/* Theme Switcher Dropdown */}
         <div className="relative" ref={themeRef}>
