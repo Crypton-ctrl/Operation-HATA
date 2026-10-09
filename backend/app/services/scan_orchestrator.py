@@ -226,7 +226,7 @@ async def run_full_scan(db: Session, scan: m.Scan, file_path: Path, attachment: 
         scan.status = "complete"
         scan.current_stage = "complete"
         from datetime import datetime
-        scan.completed_at = datetime.utcnow()
+        scan.completed_at = datetime.now()
         db.commit()
         await _emit(scan.id, "complete", "complete", {"score": risk["total_score"], "category": risk["category"]})
         await manager.broadcast("dashboard_update", {"scan_id": scan.id})

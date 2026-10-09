@@ -51,7 +51,7 @@ def delete_quarantine_item(item_id: str, payload: QuarantineActionRequest, db: S
             pass
 
     item.status = "deleted"
-    item.resolved_at = datetime.utcnow()
+    item.resolved_at = datetime.now()
     db.commit()
     return {"status": "deleted", "id": item_id}
 
@@ -67,6 +67,6 @@ def restore_quarantine_item(item_id: str, payload: QuarantineActionRequest, db: 
         raise HTTPException(status_code=403, detail="CRITICAL-risk files cannot be restored through this interface.")
 
     item.status = "restored"
-    item.resolved_at = datetime.utcnow()
+    item.resolved_at = datetime.now()
     db.commit()
     return {"status": "restored", "id": item_id}

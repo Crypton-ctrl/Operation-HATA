@@ -116,6 +116,9 @@ def oauth_callback(request: Request, db: Session = Depends(get_db)):
 
         return RedirectResponse(url=f"{redirect_target}?connected=true")
     except Exception as e:
+        import traceback
+        print(f"OAUTH CALLBACK ERROR: {str(e)}")
+        traceback.print_exc()
         return RedirectResponse(url=f"{redirect_target}?error=auth_failed")
 
 @router.post("/disconnect")

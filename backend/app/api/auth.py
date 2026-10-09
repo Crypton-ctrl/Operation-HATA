@@ -172,7 +172,7 @@ def login(payload: LoginRequest, db: Session = Depends(get_db)):
             raise HTTPException(status_code=401, detail="Invalid username or password.")
 
     try:
-        user.last_login_at = datetime.utcnow()
+        user.last_login_at = datetime.now()
         db.commit()
     except Exception as e:
         db.rollback()
@@ -205,7 +205,7 @@ def register(payload: RegisterRequest, db: Session = Depends(get_db)):
         role=payload.role or "analyst",
         avatar="shield",
         theme_preference=payload.theme_preference or "cyber",
-        last_login_at=datetime.utcnow(),
+        last_login_at=datetime.now(),
     )
     
     try:

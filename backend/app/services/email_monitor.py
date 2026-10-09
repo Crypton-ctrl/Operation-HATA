@@ -163,7 +163,7 @@ async def _poll_once(account_id: str):
             except Exception:
                 pass
 
-        account.last_sync_at = datetime.utcnow()
+        account.last_sync_at = datetime.now()
         db.commit()
 
     except Exception as exc:  # noqa: BLE001

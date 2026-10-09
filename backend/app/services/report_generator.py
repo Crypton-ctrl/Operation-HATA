@@ -73,7 +73,7 @@ def generate_pdf_report(scan_data: dict, output_path: Path) -> Path:
     scan = scan_data.get("scan", {})
     story.append(_kv_table([
         ("Scan ID", scan.get("id", "-")),
-        ("Report Generated", datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC")),
+        ("Report Generated", datetime.now().strftime("%Y-%m-%d %H:%M:%S")),
         ("Source", scan.get("source", "-").upper()),
     ]))
     story.append(Spacer(1, 10))

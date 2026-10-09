@@ -84,7 +84,7 @@ def seed_demo_data(db: Session, count_per_scenario: int = 2):
                 email_row = m.Email(
                     message_id=f"demo-{scan_id}@mail.example.com",
                     sender=sender, subject=f"[DEMO] Re: {scenario['filename']}",
-                    received_at=datetime.utcnow() - timedelta(hours=random.randint(1, 72)),
+                    received_at=datetime.now() - timedelta(hours=random.randint(1, 72)),
                     has_image_attachments=True, processed=True,
                 )
                 db.add(email_row)
@@ -103,7 +103,7 @@ def seed_demo_data(db: Session, count_per_scenario: int = 2):
             db.add(attachment)
             db.flush()
 
-            started = datetime.utcnow() - timedelta(hours=random.randint(1, 96))
+            started = datetime.now() - timedelta(hours=random.randint(1, 96))
             scan = m.Scan(
                 id=scan_id, attachment_id=attachment.id, source=source, status="complete",
                 current_stage="complete", risk_score=scenario["score"], risk_category=scenario["category"],

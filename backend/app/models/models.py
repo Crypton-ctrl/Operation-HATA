@@ -27,7 +27,7 @@ class User(Base):
     avatar = Column(String, default="shield")
     theme_preference = Column(String, default="cyber")
     is_active = Column(Boolean, default=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=datetime.now)
     last_login_at = Column(DateTime, nullable=True)
 
 
@@ -45,7 +45,7 @@ class EmailAccount(Base):
     last_sync_at = Column(DateTime, nullable=True)
     emails_checked = Column(Integer, default=0)
     attachments_analyzed = Column(Integer, default=0)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=datetime.now)
 
     emails = relationship("Email", back_populates="account")
 
@@ -57,10 +57,10 @@ class Email(Base):
     message_id = Column(String, unique=True, index=True)  # provider message id, dedup key
     sender = Column(String)
     subject = Column(String)
-    received_at = Column(DateTime, default=datetime.utcnow)
+    received_at = Column(DateTime, default=datetime.now)
     has_image_attachments = Column(Boolean, default=False)
     processed = Column(Boolean, default=False)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=datetime.now)
 
     account = relationship("EmailAccount", back_populates="emails")
     attachments = relationship("Attachment", back_populates="email")
@@ -77,7 +77,7 @@ class Attachment(Base):
     size_bytes = Column(Integer)
     sha256 = Column(String, index=True)
     source = Column(String, default="manual")  # manual | automatic
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=datetime.now)
 
     email = relationship("Email", back_populates="attachments")
     scan = relationship("Scan", back_populates="attachment", uselist=False)
@@ -92,7 +92,7 @@ class Scan(Base):
     current_stage = Column(String, default="queued")
     risk_score = Column(Integer, default=0)
     risk_category = Column(String, default="UNKNOWN")  # SAFE|LOW|MEDIUM|HIGH|CRITICAL
-    started_at = Column(DateTime, default=datetime.utcnow)
+    started_at = Column(DateTime, default=datetime.now)
     completed_at = Column(DateTime, nullable=True)
     error_message = Column(Text, nullable=True)
 
@@ -277,7 +277,7 @@ class AiReport(Base):
     confidence = Column(String, nullable=True)
     limitations = Column(Text, nullable=True)
     raw_model_output = Column(Text, nullable=True)
-    generated_at = Column(DateTime, default=datetime.utcnow)
+    generated_at = Column(DateTime, default=datetime.now)
 
     scan = relationship("Scan", back_populates="ai_report")
 
@@ -291,7 +291,7 @@ class QuarantineItem(Base):
     risk_category = Column(String)
     reason = Column(Text, nullable=True)
     status = Column(String, default="quarantined")  # quarantined|deleted|restored
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=datetime.now)
     resolved_at = Column(DateTime, nullable=True)
 
     scan = relationship("Scan", back_populates="quarantine_item")
@@ -305,7 +305,7 @@ class Notification(Base):
     message = Column(Text)
     severity = Column(String, default="info")  # info|low|medium|high|critical
     read = Column(Boolean, default=False)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=datetime.now)
 
 
 class UserSettings(Base):
@@ -341,4 +341,4 @@ class UserSettings(Base):
     notifications_enabled = Column(Boolean, default=True)
     ai_provider = Column(String, default="anthropic")
     ai_model = Column(String, default="claude-sonnet-4-6")
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
