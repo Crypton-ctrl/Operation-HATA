@@ -52,7 +52,7 @@ def email_status(db: Session = Depends(get_db)):
     }
 
 @router.get("/oauth-url")
-def get_oauth_url(db: Session = Depends(require_auth)):
+def get_oauth_url(db: Session = Depends(get_db), _: bool = require_auth):
     try:
         flow = get_google_flow()
         authorization_url, state = flow.authorization_url(
@@ -119,7 +119,7 @@ def oauth_callback(request: Request, db: Session = Depends(get_db)):
         return RedirectResponse(url=f"{redirect_target}?error=auth_failed")
 
 @router.post("/disconnect")
-def disconnect_email(db: Session = Depends(require_auth)):
+def disconnect_email(db: Session = Depends(get_db), _: bool = require_auth):
     account = db.query(m.EmailAccount).first()
     if account:
         if account.monitoring_active:
@@ -148,7 +148,7 @@ def disconnect_email(db: Session = Depends(require_auth)):
 
 
 @router.post("/start-monitoring")
-async def start_monitoring(payload: MonitoringIntervalRequest, db: Session = Depends(require_auth)):
+async def start_monitoring(payload: MonitoringIntervalRequest, db: Session = Depends(get_db), _: bool = require_auth):
     account = db.query(m.EmailAccount).first()
     if not account or not account.connected:
         raise HTTPException(status_code=400, detail="No connected email account. Connect one first.")
@@ -160,7 +160,7 @@ async def start_monitoring(payload: MonitoringIntervalRequest, db: Session = Dep
 
 
 @router.post("/stop-monitoring")
-async def stop_monitoring(db: Session = Depends(require_auth)):
+async def stop_monitoring(db: Session = Depends(get_db), _: bool = require_auth):
     account = db.query(m.EmailAccount).first()
     if account:
         account.monitoring_active = False
@@ -170,7 +170,7 @@ async def stop_monitoring(db: Session = Depends(require_auth)):
 
 
 @router.post("/sync-now")
-async def sync_now(db: Session = Depends(require_auth)):
+async def sync_now(db: Session = Depends(get_db), _: bool = require_auth):
     account = db.query(m.EmailAccount).first()
     if not account or not account.connected:
         raise HTTPException(status_code=400, detail="No connected email account.")
