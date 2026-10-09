@@ -22,3 +22,4 @@ pytesseract==0.3.13
 pyzbar==0.1.9
 opencv-python-headless==4.10.0.84
 numpy==2.1.1
+psycopg2-binary==2.9.9

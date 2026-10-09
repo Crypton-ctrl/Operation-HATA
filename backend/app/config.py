@@ -6,6 +6,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import List
 from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic import model_validator
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -44,6 +45,26 @@ class Settings(BaseSettings):
     QUARANTINE_DIR: Path = BASE_DIR / "quarantine"
     REPORTS_DIR: Path = BASE_DIR / "reports"
     YARA_RULES_DIR: Path = BASE_DIR / "rules" / "yara"
+
+    @model_validator(mode="after")
+    def _normalise_database_url(self) -> "Settings":
+        url = self.DATABASE_URL
+        # Render / Heroku give postgresql:// but SQLAlchemy 2.x needs
+        # an explicit driver: postgresql+psycopg2://
+        if url.startswith("postgres://"):
+            url = url.replace("postgres://", "postgresql+psycopg2://", 1)
+        elif url.startswith("postgresql://") and "+psycopg2" not in url:
+            url = url.replace("postgresql://", "postgresql+psycopg2://", 1)
+
+        # Resolve relative SQLite paths (like sqlite:///./hata.db) to absolute
+        # paths anchored at BASE_DIR so the DB is always found regardless of CWD.
+        if url.startswith("sqlite:///./") or url.startswith("sqlite:///.."):
+            relative = url.replace("sqlite:///", "", 1)
+            absolute = (BASE_DIR / relative).resolve()
+            url = f"sqlite:///{absolute}"
+
+        self.DATABASE_URL = url
+        return self
 
     @property
     def cors_origin_list(self) -> List[str]:

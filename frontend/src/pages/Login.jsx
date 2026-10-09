@@ -23,7 +23,6 @@ export default function Login({ onSuccess }) {
   const [regUsername, setRegUsername] = useState('')
   const [regEmail, setRegEmail] = useState('')
   const [regPassword, setRegPassword] = useState('')
-  const [regRole, setRegRole] = useState('analyst')
 
   const [error, setError] = useState(null)
   const [busy, setBusy] = useState(false)
@@ -53,7 +52,6 @@ export default function Login({ onSuccess }) {
         password: regPassword,
         full_name: regFullName,
         email: regEmail,
-        role: regRole,
       })
       setSuccessMsg('Account created! Authenticating session...')
       setTimeout(() => {
@@ -250,20 +248,7 @@ export default function Login({ onSuccess }) {
               />
             </div>
 
-            <div>
-              <label className="text-xs text-hata-muted font-medium">SOC Role</label>
-              <select
-                value={regRole}
-                onChange={(e) => setRegRole(e.target.value)}
-                className="focus-ring w-full px-3 py-2 rounded-lg bg-hata-panel2 border border-hata-border text-sm text-hata-text mt-1"
-              >
-                <option value="analyst">SOC Tier 2 Analyst</option>
-                <option value="hunter">Threat Intelligence Hunter</option>
-                <option value="forensics">Forensics Specialist</option>
-                <option value="auditor">Compliance & Security Auditor</option>
-                <option value="admin">Security Administrator</option>
-              </select>
-            </div>
+
 
             <div>
               <label className="text-xs text-hata-muted font-medium">Password</label>

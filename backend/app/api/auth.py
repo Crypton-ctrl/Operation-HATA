@@ -68,12 +68,23 @@ def seed_default_users(db: Session):
     db.commit()
 
 
-# Seed accounts when module loads
-try:
-    with SessionLocal() as init_db:
-        seed_default_users(init_db)
-except Exception:
-    pass
+# Flag to track whether default users have been seeded in this process.
+# Seeding at import-time was unreliable because this module is imported
+# *before* Base.metadata.create_all() runs in main.py, so the users
+# table may not exist yet.  We seed lazily on first request instead.
+_seeded = False
+
+
+def ensure_default_users(db: Session):
+    """Seed default accounts on first use (after tables exist)."""
+    global _seeded
+    if _seeded:
+        return
+    try:
+        seed_default_users(db)
+        _seeded = True
+    except Exception:
+        pass
 
 
 class LoginRequest(BaseModel):
@@ -133,6 +144,8 @@ require_auth = Depends(_check_auth)
 
 @router.post("/login")
 def login(payload: LoginRequest, db: Session = Depends(get_db)):
+    ensure_default_users(db)
+    
     username = (payload.username or "").strip().lower()
     password = payload.password
 
@@ -141,9 +154,6 @@ def login(payload: LoginRequest, db: Session = Depends(get_db)):
     if not username:
         if secrets.compare_digest(password, settings.ACCESS_PASSWORD):
             admin_user = db.query(m.User).filter_by(username="admin").first()
-            if not admin_user:
-                seed_default_users(db)
-                admin_user = db.query(m.User).filter_by(username="admin").first()
             token = secrets.token_hex(32)
             _sessions[token] = admin_user.id
             return {"token": token, "user": serialize_user(admin_user)}
@@ -151,12 +161,7 @@ def login(payload: LoginRequest, db: Session = Depends(get_db)):
 
     user = db.query(m.User).filter_by(username=username).first()
     if not user:
-        # Check if username is admin and password matches ACCESS_PASSWORD
-        if username == "admin" and secrets.compare_digest(password, settings.ACCESS_PASSWORD):
-            seed_default_users(db)
-            user = db.query(m.User).filter_by(username="admin").first()
-        else:
-            raise HTTPException(status_code=401, detail="Invalid username or password.")
+        raise HTTPException(status_code=401, detail="Invalid username or password.")
 
     computed_hash = hash_password(password, user.salt)
     if not secrets.compare_digest(computed_hash, user.password_hash):
@@ -166,8 +171,12 @@ def login(payload: LoginRequest, db: Session = Depends(get_db)):
         else:
             raise HTTPException(status_code=401, detail="Invalid username or password.")
 
-    user.last_login_at = datetime.utcnow()
-    db.commit()
+    try:
+        user.last_login_at = datetime.utcnow()
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Database error during login: {str(e)}")
 
     token = secrets.token_hex(32)
     _sessions[token] = user.id
@@ -176,6 +185,8 @@ def login(payload: LoginRequest, db: Session = Depends(get_db)):
 
 @router.post("/register")
 def register(payload: RegisterRequest, db: Session = Depends(get_db)):
+    ensure_default_users(db)
+
     username = payload.username.strip().lower()
     if not username.replace("_", "").replace("-", "").isalnum():
         raise HTTPException(status_code=400, detail="Username may only contain letters, numbers, hyphens, and underscores.")
@@ -196,9 +207,14 @@ def register(payload: RegisterRequest, db: Session = Depends(get_db)):
         theme_preference=payload.theme_preference or "cyber",
         last_login_at=datetime.utcnow(),
     )
-    db.add(user)
-    db.commit()
-    db.refresh(user)
+    
+    try:
+        db.add(user)
+        db.commit()
+        db.refresh(user)
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=400, detail=f"Could not create account: {str(e)}")
 
     token = secrets.token_hex(32)
     _sessions[token] = user.id
