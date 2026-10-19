@@ -136,11 +136,15 @@ async def _poll_once(account_id: str):
                     stored_filename=saved["stored_filename"], stored_path=saved["stored_path"],
                     content_type_declared=content_type, size_bytes=saved["size_bytes"],
                     source="automatic",
+                    user_id=account.user_id,
                 )
                 db.add(attachment)
                 db.flush()
 
-                scan = m.Scan(id=scan_id, attachment_id=attachment.id, source="automatic", status="pending")
+                scan = m.Scan(
+                    id=scan_id, attachment_id=attachment.id, source="automatic",
+                    status="pending", user_id=account.user_id
+                )
                 db.add(scan)
                 db.commit()
 

@@ -210,6 +210,7 @@ async def run_full_scan(db: Session, scan: m.Scan, file_path: Path, attachment: 
                 scan_id=scan.id, filename=attachment.original_filename, sha256=hashes.get("sha256"),
                 risk_category=risk["category"],
                 reason="; ".join(f["factor"] for f in risk["contributing_factors"][:4]) or "Elevated risk score",
+                user_id=scan.user_id,
             ))
             severity = "critical" if risk["category"] == "CRITICAL" else ("high" if risk["category"] == "HIGH" else "medium")
             notif = m.Notification(
@@ -217,6 +218,7 @@ async def run_full_scan(db: Session, scan: m.Scan, file_path: Path, attachment: 
                 title=f"{'CRITICAL THREAT' if risk['category']=='CRITICAL' else risk['category']+'-RISK ATTACHMENT'} DETECTED",
                 message=f"{attachment.original_filename} - Risk: {risk['total_score']}/100",
                 severity=severity,
+                user_id=scan.user_id,
             )
             db.add(notif)
             await manager.broadcast("notification", {

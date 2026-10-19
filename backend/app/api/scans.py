@@ -16,6 +16,7 @@ from app.services.attachment_manager import save_upload_to_quarantine, new_scan_
 from app.services.scan_orchestrator import run_full_scan
 from app.services.report_generator import generate_pdf_report
 from app.utils.serializers import serialize_scan_summary, serialize_scan_full
+from app.api.auth import get_current_user
 from app.config import get_settings
 
 router = APIRouter(prefix="/api/scans", tags=["scans"])
@@ -33,7 +34,7 @@ def _get_settings_row(db: Session) -> m.UserSettings:
 
 
 @router.post("/upload")
-async def upload_scan(file: UploadFile = File(...), db: Session = Depends(get_db)):
+async def upload_scan(file: UploadFile = File(...), db: Session = Depends(get_db), user: m.User = Depends(get_current_user)):
     """Validates and quarantines an uploaded image. Does NOT start analysis yet -
     call POST /api/scans/{id}/start to begin the pipeline."""
     scan_id = new_scan_id()
@@ -46,11 +47,12 @@ async def upload_scan(file: UploadFile = File(...), db: Session = Depends(get_db
         content_type_declared=saved["declared_mime"],
         size_bytes=saved["size_bytes"],
         source="manual",
+        user_id=user.id,
     )
     db.add(attachment)
     db.flush()
 
-    scan = m.Scan(id=scan_id, attachment_id=attachment.id, source="manual", status="pending")
+    scan = m.Scan(id=scan_id, attachment_id=attachment.id, source="manual", status="pending", user_id=user.id)
     db.add(scan)
     db.commit()
     db.refresh(scan)
@@ -65,10 +67,12 @@ async def upload_scan(file: UploadFile = File(...), db: Session = Depends(get_db
 
 
 @router.post("/{scan_id}/start")
-async def start_scan(scan_id: str, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
+async def start_scan(scan_id: str, background_tasks: BackgroundTasks, db: Session = Depends(get_db), user: m.User = Depends(get_current_user)):
     scan = db.query(m.Scan).filter_by(id=scan_id).first()
     if not scan:
         raise HTTPException(status_code=404, detail="Scan not found.")
+    if scan.user_id and scan.user_id != user.id and user.role != "admin":
+        raise HTTPException(status_code=403, detail="Access denied.")
     if scan.status not in ("pending", "failed"):
         raise HTTPException(status_code=400, detail=f"Scan already {scan.status}.")
 
@@ -106,12 +110,13 @@ def _run_scan_task(scan_id, file_path, attachment_id, settings_id, email_id):
 @router.get("")
 def list_scans(
     db: Session = Depends(get_db),
+    user: m.User = Depends(get_current_user),
     source: Optional[str] = None,
     category: Optional[str] = None,
     search: Optional[str] = None,
     limit: int = 100,
 ):
-    query = db.query(m.Scan)
+    query = db.query(m.Scan).filter(m.Scan.user_id == user.id)
     if source and source != "all":
         query = query.filter(m.Scan.source == source)
     if category and category != "all":
@@ -126,28 +131,34 @@ def list_scans(
 
 
 @router.get("/{scan_id}")
-def get_scan(scan_id: str, db: Session = Depends(get_db)):
+def get_scan(scan_id: str, db: Session = Depends(get_db), user: m.User = Depends(get_current_user)):
     scan = db.query(m.Scan).filter_by(id=scan_id).first()
     if not scan:
         raise HTTPException(status_code=404, detail="Scan not found.")
+    if scan.user_id and scan.user_id != user.id and user.role != "admin":
+        raise HTTPException(status_code=403, detail="Access denied.")
     return serialize_scan_full(scan)
 
 
 @router.get("/{scan_id}/report")
-def get_scan_report(scan_id: str, db: Session = Depends(get_db)):
+def get_scan_report(scan_id: str, db: Session = Depends(get_db), user: m.User = Depends(get_current_user)):
     scan = db.query(m.Scan).filter_by(id=scan_id).first()
     if not scan:
         raise HTTPException(status_code=404, detail="Scan not found.")
+    if scan.user_id and scan.user_id != user.id and user.role != "admin":
+        raise HTTPException(status_code=403, detail="Access denied.")
     if scan.status != "complete":
         raise HTTPException(status_code=400, detail="Scan has not completed yet.")
     return serialize_scan_full(scan)
 
 
 @router.get("/{scan_id}/report/pdf")
-def download_pdf_report(scan_id: str, db: Session = Depends(get_db)):
+def download_pdf_report(scan_id: str, db: Session = Depends(get_db), user: m.User = Depends(get_current_user)):
     scan = db.query(m.Scan).filter_by(id=scan_id).first()
     if not scan:
         raise HTTPException(status_code=404, detail="Scan not found.")
+    if scan.user_id and scan.user_id != user.id and user.role != "admin":
+        raise HTTPException(status_code=403, detail="Access denied.")
     if scan.status != "complete":
         raise HTTPException(status_code=400, detail="Scan has not completed yet.")
 

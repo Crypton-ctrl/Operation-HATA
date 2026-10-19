@@ -10,13 +10,14 @@ from datetime import datetime
 from app.database.session import get_db
 from app.models import models as m
 from app.schemas.schemas import QuarantineActionRequest
+from app.api.auth import get_current_user
 
 router = APIRouter(prefix="/api/quarantine", tags=["quarantine"])
 
 
 @router.get("")
-def list_quarantine(db: Session = Depends(get_db)):
-    items = db.query(m.QuarantineItem).order_by(m.QuarantineItem.created_at.desc()).all()
+def list_quarantine(db: Session = Depends(get_db), user: m.User = Depends(get_current_user)):
+    items = db.query(m.QuarantineItem).filter_by(user_id=user.id).order_by(m.QuarantineItem.created_at.desc()).all()
     result = []
     for item in items:
         scan = item.scan
@@ -36,12 +37,14 @@ def list_quarantine(db: Session = Depends(get_db)):
 
 
 @router.delete("/{item_id}")
-def delete_quarantine_item(item_id: str, payload: QuarantineActionRequest, db: Session = Depends(get_db)):
+def delete_quarantine_item(item_id: str, payload: QuarantineActionRequest, db: Session = Depends(get_db), user: m.User = Depends(get_current_user)):
     if not payload.confirm:
         raise HTTPException(status_code=400, detail="Destructive action requires explicit confirmation (confirm=true).")
     item = db.query(m.QuarantineItem).filter_by(id=item_id).first()
     if not item:
         raise HTTPException(status_code=404, detail="Quarantine item not found.")
+    if item.user_id and item.user_id != user.id and user.role != "admin":
+        raise HTTPException(status_code=403, detail="Access denied.")
 
     scan = item.scan
     if scan and scan.attachment and scan.attachment.stored_path:
@@ -57,12 +60,14 @@ def delete_quarantine_item(item_id: str, payload: QuarantineActionRequest, db: S
 
 
 @router.post("/{item_id}/restore")
-def restore_quarantine_item(item_id: str, payload: QuarantineActionRequest, db: Session = Depends(get_db)):
+def restore_quarantine_item(item_id: str, payload: QuarantineActionRequest, db: Session = Depends(get_db), user: m.User = Depends(get_current_user)):
     if not payload.confirm:
         raise HTTPException(status_code=400, detail="Restoring a quarantined file requires explicit confirmation (confirm=true).")
     item = db.query(m.QuarantineItem).filter_by(id=item_id).first()
     if not item:
         raise HTTPException(status_code=404, detail="Quarantine item not found.")
+    if item.user_id and item.user_id != user.id and user.role != "admin":
+        raise HTTPException(status_code=403, detail="Access denied.")
     if item.risk_category == "CRITICAL":
         raise HTTPException(status_code=403, detail="CRITICAL-risk files cannot be restored through this interface.")
 

@@ -45,7 +45,7 @@ export default function AutomaticMonitoring() {
     e.preventDefault()
     setBusy(true); setError(null)
     try {
-      const { url } = await getOAuthUrl()
+      const { url } = await getOAuthUrl(window.location.origin)
       window.location.href = url
     } catch (err) { 
       setError(err.message) 

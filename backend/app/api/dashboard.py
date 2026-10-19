@@ -7,17 +7,18 @@ from sqlalchemy import func
 from app.database.session import get_db
 from app.models import models as m
 from app.utils.serializers import serialize_scan_summary
+from app.api.auth import get_current_user
 
 router = APIRouter(prefix="/api/dashboard", tags=["dashboard"])
 
 
 @router.get("/stats")
-def dashboard_stats(db: Session = Depends(get_db)):
-    total = db.query(func.count(m.Scan.id)).filter(m.Scan.status == "complete").scalar() or 0
+def dashboard_stats(db: Session = Depends(get_db), user: m.User = Depends(get_current_user)):
+    total = db.query(func.count(m.Scan.id)).filter(m.Scan.status == "complete", m.Scan.user_id == user.id).scalar() or 0
 
     category_counts = {c: 0 for c in ["SAFE", "LOW", "MEDIUM", "HIGH", "CRITICAL"]}
     rows = db.query(m.Scan.risk_category, func.count(m.Scan.id)).filter(
-        m.Scan.status == "complete").group_by(m.Scan.risk_category).all()
+        m.Scan.status == "complete", m.Scan.user_id == user.id).group_by(m.Scan.risk_category).all()
     for cat, count in rows:
         if cat in category_counts:
             category_counts[cat] = count
@@ -26,16 +27,16 @@ def dashboard_stats(db: Session = Depends(get_db)):
     suspicious = category_counts["MEDIUM"]
     safe = category_counts["SAFE"] + category_counts["LOW"]
 
-    recent = db.query(m.Scan).filter(m.Scan.status == "complete").order_by(
+    recent = db.query(m.Scan).filter(m.Scan.status == "complete", m.Scan.user_id == user.id).order_by(
         m.Scan.started_at.desc()).limit(8).all()
     recent_data = [serialize_scan_summary(s) for s in recent]
 
     recent_threats = db.query(m.Scan).filter(
-        m.Scan.status == "complete", m.Scan.risk_category.in_(["HIGH", "CRITICAL"])
+        m.Scan.status == "complete", m.Scan.risk_category.in_(["HIGH", "CRITICAL"]), m.Scan.user_id == user.id
     ).order_by(m.Scan.started_at.desc()).limit(5).all()
     recent_threats_data = [serialize_scan_summary(s) for s in recent_threats]
 
-    account = db.query(m.EmailAccount).first()
+    account = db.query(m.EmailAccount).filter_by(user_id=user.id).first()
     monitoring = {
         "connected": bool(account and account.connected),
         "email_address": account.email_address if account else None,
@@ -45,7 +46,7 @@ def dashboard_stats(db: Session = Depends(get_db)):
         "attachments_analyzed": account.attachments_analyzed if account else 0,
     }
 
-    latest_scan = db.query(m.Scan).filter(m.Scan.status == "complete").order_by(
+    latest_scan = db.query(m.Scan).filter(m.Scan.status == "complete", m.Scan.user_id == user.id).order_by(
         m.Scan.started_at.desc()).first()
     current_risk = {
         "score": latest_scan.risk_score if latest_scan else 0,

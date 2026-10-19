@@ -34,6 +34,7 @@ class User(Base):
 class EmailAccount(Base):
     __tablename__ = "email_accounts"
     id = Column(String, primary_key=True, default=lambda: gen_id("ACC"))
+    user_id = Column(String, ForeignKey("users.id"), nullable=True, index=True)
     email_address = Column(String, nullable=False)
     provider = Column(String, default="gmail")
     auth_method = Column(String, default="oauth")  # oauth | imap_app_password
@@ -69,6 +70,7 @@ class Email(Base):
 class Attachment(Base):
     __tablename__ = "attachments"
     id = Column(String, primary_key=True, default=lambda: gen_id("ATT"))
+    user_id = Column(String, ForeignKey("users.id"), nullable=True, index=True)
     email_id = Column(String, ForeignKey("emails.id"), nullable=True)
     original_filename = Column(String)
     stored_filename = Column(String)
@@ -86,6 +88,7 @@ class Attachment(Base):
 class Scan(Base):
     __tablename__ = "scans"
     id = Column(String, primary_key=True, default=lambda: gen_id("SCAN"))
+    user_id = Column(String, ForeignKey("users.id"), nullable=True, index=True)
     attachment_id = Column(String, ForeignKey("attachments.id"))
     source = Column(String, default="manual")  # manual | automatic | demo
     status = Column(String, default="pending")  # pending|running|complete|failed
@@ -285,6 +288,7 @@ class AiReport(Base):
 class QuarantineItem(Base):
     __tablename__ = "quarantine_items"
     id = Column(String, primary_key=True, default=lambda: gen_id("QTN"))
+    user_id = Column(String, ForeignKey("users.id"), nullable=True, index=True)
     scan_id = Column(String, ForeignKey("scans.id"))
     filename = Column(String)
     sha256 = Column(String)
@@ -300,6 +304,7 @@ class QuarantineItem(Base):
 class Notification(Base):
     __tablename__ = "notifications"
     id = Column(String, primary_key=True, default=lambda: gen_id("NTF"))
+    user_id = Column(String, ForeignKey("users.id"), nullable=True, index=True)
     scan_id = Column(String, ForeignKey("scans.id"), nullable=True)
     title = Column(String)
     message = Column(Text)
