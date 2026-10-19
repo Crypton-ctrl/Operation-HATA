@@ -29,6 +29,7 @@ export default function Login({ onSuccess }) {
     const searchParams = new URLSearchParams(window.location.search)
     const urlToken = searchParams.get('token')
     const urlError = searchParams.get('error')
+    const urlDetail = searchParams.get('detail')
 
     if (urlToken) {
       sessionStorage.setItem('hata_token', urlToken)
@@ -36,7 +37,8 @@ export default function Login({ onSuccess }) {
     }
     
     if (urlError) {
-      setError(`Google Auth Error: ${urlError}`)
+      const detailMsg = urlDetail ? `: ${decodeURIComponent(urlDetail)}` : ` (${urlError})`
+      setError(`Google Auth Error${detailMsg}`)
     }
   }, [])
 

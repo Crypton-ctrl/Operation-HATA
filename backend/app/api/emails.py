@@ -88,8 +88,7 @@ def get_oauth_login_url(request: Request):
         state = f"login:{origin}"
         authorization_url, _ = flow.authorization_url(
             access_type='offline',
-            include_granted_scopes='true',
-            prompt='consent',
+            prompt='select_account',
             state=state
         )
         return RedirectResponse(url=authorization_url)
@@ -97,7 +96,7 @@ def get_oauth_login_url(request: Request):
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/oauth/callback")
-def oauth_callback(request: Request, db: Session = Depends(get_db)):
+async def oauth_callback(request: Request, db: Session = Depends(get_db)):
     code = request.query_params.get("code")
     error = request.query_params.get("error")
     state = request.query_params.get("state", "")
@@ -154,7 +153,7 @@ def oauth_callback(request: Request, db: Session = Depends(get_db)):
             'token_uri': creds.token_uri,
             'client_id': creds.client_id,
             'client_secret': creds.client_secret,
-            'scopes': list(creds.scopes) if creds.scopes else list(SCOPES),
+            'scopes': list(creds.scopes) if creds.scopes else list(LOGIN_SCOPES if is_login else GMAIL_SCOPES),
         }
         encrypted = encrypt_credential(json.dumps(creds_data))
 
@@ -194,39 +193,52 @@ def oauth_callback(request: Request, db: Session = Depends(get_db)):
         else:
             account = db.query(m.EmailAccount).filter_by(email_address=email_address).first()
         
-        if account:
-            account.email_address = email_address
-            account.provider = "gmail"
-            account.auth_method = "oauth2"
-            account.encrypted_credential = encrypted
-            account.connected = True
-            account.monitoring_active = True
+        if not is_login:
+            # Connect Gmail flow with GMAIL_SCOPES
+            if account:
+                account.email_address = email_address
+                account.provider = "gmail"
+                account.auth_method = "oauth2"
+                account.encrypted_credential = encrypted
+                account.connected = True
+                account.monitoring_active = True
+            else:
+                account = m.EmailAccount(
+                    user_id=owner_id,
+                    email_address=email_address, provider="gmail",
+                    auth_method="oauth2", encrypted_credential=encrypted, connected=True,
+                    monitoring_active=True
+                )
+                db.add(account)
+            db.commit()
+
+            # Start monitoring in background automatically
+            email_monitor.start_monitoring(account.id, account.poll_interval_seconds)
+            return RedirectResponse(url=f"{redirect_target}?connected=true")
         else:
-            account = m.EmailAccount(
-                user_id=owner_id,
-                email_address=email_address, provider="gmail",
-                auth_method="oauth2", encrypted_credential=encrypted, connected=True,
-                monitoring_active=True
-            )
-            db.add(account)
-        db.commit()
+            # Pure login flow
+            if not account:
+                account = m.EmailAccount(
+                    user_id=owner_id,
+                    email_address=email_address, provider="gmail",
+                    auth_method="oauth2", encrypted_credential=None, connected=False,
+                    monitoring_active=False
+                )
+                db.add(account)
+                db.commit()
 
-        # Start monitoring in background automatically
-        email_monitor.start_monitoring(account.id, account.poll_interval_seconds)
-
-        if is_login:
-            # create session
             token = secrets.token_hex(32)
             _sessions[token] = user.id
             return RedirectResponse(url=f"{frontend_url}/login?token={token}")
-        else:
-            return RedirectResponse(url=f"{redirect_target}?connected=true")
 
     except Exception as e:
         import traceback
-        print(f"OAUTH CALLBACK ERROR: {str(e)}")
+        import urllib.parse
+        err_msg = str(e)
+        print(f"OAUTH CALLBACK ERROR: {err_msg}")
         traceback.print_exc()
-        return RedirectResponse(url=f"{redirect_target}?error=auth_failed")
+        safe_msg = urllib.parse.quote(err_msg[:120])
+        return RedirectResponse(url=f"{redirect_target}?error=auth_failed&detail={safe_msg}")
 
 @router.post("/disconnect")
 def disconnect_email(db: Session = Depends(get_db), user: m.User = Depends(get_current_user)):

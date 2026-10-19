@@ -316,9 +316,14 @@ async def _monitor_loop(account_id: str, interval_seconds: int):
 def start_monitoring(account_id: str, interval_seconds: int = 60):
     if account_id in _monitor_tasks and not _monitor_tasks[account_id].done():
         return False
-    task = asyncio.create_task(_monitor_loop(account_id, interval_seconds))
-    _monitor_tasks[account_id] = task
-    return True
+    try:
+        loop = asyncio.get_running_loop()
+        task = loop.create_task(_monitor_loop(account_id, interval_seconds))
+        _monitor_tasks[account_id] = task
+        return True
+    except RuntimeError as err:
+        logger.warning(f"Could not start monitor loop for {account_id}: {err}")
+        return False
 
 
 def stop_monitoring(account_id: str):
