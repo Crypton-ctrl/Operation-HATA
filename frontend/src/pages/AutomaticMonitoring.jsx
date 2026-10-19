@@ -2,7 +2,7 @@ import { useEffect, useState, useCallback } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { Mail, PlayCircle, StopCircle, RefreshCcw, CheckCircle2, XCircle } from 'lucide-react'
 import {
-  getEmailStatus, getOAuthUrl, disconnectEmail, startMonitoring, stopMonitoring, syncNow,
+  getEmailStatus, getOAuthUrl, connectImap, disconnectEmail, startMonitoring, stopMonitoring, syncNow,
 } from '../services/api.js'
 import { useNotifications } from '../context/NotificationContext.jsx'
 import ErrorPanel from '../components/common/ErrorPanel.jsx'
@@ -12,6 +12,9 @@ export default function AutomaticMonitoring() {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState(null)
   const [interval_, setInterval_] = useState(60)
+  const [connectMethod, setConnectMethod] = useState('app_password') // 'app_password' | 'oauth'
+  const [imapEmail, setImapEmail] = useState('')
+  const [imapPassword, setImapPassword] = useState('')
   const { liveEvents } = useNotifications()
   const location = useLocation()
   const navigate = useNavigate()
@@ -49,6 +52,20 @@ export default function AutomaticMonitoring() {
       window.location.href = url
     } catch (err) { 
       setError(err.message) 
+      setBusy(false)
+    }
+  }
+
+  const handleImapConnect = async (e) => {
+    e.preventDefault()
+    setBusy(true)
+    setError(null)
+    try {
+      await connectImap(imapEmail, imapPassword)
+      await load()
+    } catch (err) {
+      setError(err.message || 'Failed to connect Gmail.')
+    } finally {
       setBusy(false)
     }
   }
@@ -100,15 +117,89 @@ export default function AutomaticMonitoring() {
 
         {!status?.connected ? (
           <div className="space-y-4">
-            <p className="text-sm text-hata-muted">
-              Connect your Gmail account securely using Google OAuth 2.0. HATA will never ask for or store your Gmail password. 
-              We only request read-only access to scan incoming email attachments.
-            </p>
-            {error && <p className="text-xs text-risk-critical">{error}</p>}
-            <button disabled={busy} onClick={handleConnect}
-              className="focus-ring w-full py-2.5 rounded-lg font-semibold text-sm bg-hata-accent text-hata-bg hover:bg-cyan-300 disabled:opacity-50 transition-colors">
-              Connect Gmail
-            </button>
+            <div className="flex p-1 bg-hata-panel rounded-lg border border-hata-border mb-4">
+              <button
+                type="button"
+                onClick={() => setConnectMethod('app_password')}
+                className={`flex-1 py-1.5 rounded-md text-xs font-semibold transition-all ${
+                  connectMethod === 'app_password' ? 'bg-hata-accent text-hata-bg' : 'text-hata-muted hover:text-hata-text'
+                }`}
+              >
+                Gmail App Password (Recommended)
+              </button>
+              <button
+                type="button"
+                onClick={() => setConnectMethod('oauth')}
+                className={`flex-1 py-1.5 rounded-md text-xs font-semibold transition-all ${
+                  connectMethod === 'oauth' ? 'bg-hata-accent text-hata-bg' : 'text-hata-muted hover:text-hata-text'
+                }`}
+              >
+                Google OAuth 2.0
+              </button>
+            </div>
+
+            {connectMethod === 'app_password' ? (
+              <form onSubmit={handleImapConnect} className="space-y-3">
+                <p className="text-xs text-hata-muted">
+                  Connect 24/7 background monitoring with a standard 16-character Google App Password. No Google approval or domain verification needed!
+                </p>
+                <div>
+                  <label className="text-xs text-hata-muted font-medium">Your Gmail Address</label>
+                  <input
+                    type="email"
+                    required
+                    value={imapEmail}
+                    onChange={(e) => setImapEmail(e.target.value)}
+                    placeholder="e.g. user@gmail.com"
+                    className="focus-ring w-full px-3 py-2 rounded-lg bg-hata-panel2 border border-hata-border text-sm text-hata-text placeholder:text-hata-muted/50 mt-1"
+                  />
+                </div>
+                <div>
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs text-hata-muted font-medium">Google App Password (16 letters)</label>
+                    <a
+                      href="https://myaccount.google.com/apppasswords"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-[11px] text-hata-accent hover:underline"
+                    >
+                      Generate App Password &rarr;
+                    </a>
+                  </div>
+                  <input
+                    type="password"
+                    required
+                    value={imapPassword}
+                    onChange={(e) => setImapPassword(e.target.value)}
+                    placeholder="xxxx xxxx xxxx xxxx"
+                    className="focus-ring w-full px-3 py-2 rounded-lg bg-hata-panel2 border border-hata-border text-sm text-hata-text placeholder:text-hata-muted/50 mt-1 font-mono"
+                  />
+                </div>
+                {error && <p className="text-xs text-risk-critical">{error}</p>}
+                <button
+                  type="submit"
+                  disabled={busy}
+                  className="focus-ring w-full py-2.5 rounded-lg font-semibold text-sm bg-hata-accent text-hata-bg hover:opacity-90 disabled:opacity-50 transition-colors shadow-sm"
+                >
+                  {busy ? 'Connecting...' : 'Connect & Start Monitoring'}
+                </button>
+              </form>
+            ) : (
+              <div className="space-y-4">
+                <p className="text-sm text-hata-muted">
+                  Connect your Gmail account using Google OAuth 2.0. Requires your email to be authorized on the Google Cloud Console.
+                </p>
+                {error && <p className="text-xs text-risk-critical">{error}</p>}
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={handleConnect}
+                  className="focus-ring w-full py-2.5 rounded-lg font-semibold text-sm bg-hata-accent text-hata-bg hover:opacity-90 disabled:opacity-50 transition-colors shadow-sm"
+                >
+                  {busy ? 'Connecting...' : 'Connect Gmail with OAuth'}
+                </button>
+              </div>
+            )}
           </div>
         ) : (
           <div className="space-y-4">

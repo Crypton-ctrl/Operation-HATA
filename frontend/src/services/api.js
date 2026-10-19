@@ -75,6 +75,7 @@ export const getDashboardStats = () => api.get('/dashboard/stats').then(r => r.d
 // --- Emails ---
 export const getEmailStatus = () => api.get('/emails/status').then(r => r.data)
 export const getOAuthUrl = (redirect) => api.get('/emails/oauth-url', { params: redirect ? { redirect } : {} }).then(r => r.data)
+export const connectImap = (email_address, app_password) => api.post('/emails/connect-imap', { email_address, app_password }).then(r => r.data)
 export const disconnectEmail = () => api.post('/emails/disconnect').then(r => r.data)
 export const startMonitoring = (interval_seconds) => api.post('/emails/start-monitoring', { interval_seconds }).then(r => r.data)
 export const stopMonitoring = () => api.post('/emails/stop-monitoring').then(r => r.data)

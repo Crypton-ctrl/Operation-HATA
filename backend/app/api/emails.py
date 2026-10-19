@@ -17,16 +17,23 @@ from google.oauth2.credentials import Credentials
 router = APIRouter(prefix="/api/emails", tags=["emails"])
 settings = get_settings()
 
-SCOPES = [
+LOGIN_SCOPES = [
+    "openid",
+    "https://www.googleapis.com/auth/userinfo.email",
+    "https://www.googleapis.com/auth/userinfo.profile"
+]
+
+GMAIL_SCOPES = [
     "https://www.googleapis.com/auth/gmail.readonly",
     "openid",
     "https://www.googleapis.com/auth/userinfo.email",
     "https://www.googleapis.com/auth/userinfo.profile"
 ]
 
-def get_google_flow():
+def get_google_flow(scopes=None):
     if not settings.GMAIL_CLIENT_ID or not settings.GMAIL_CLIENT_SECRET:
         raise HTTPException(status_code=500, detail="Google OAuth credentials are not configured on the server.")
+    target_scopes = scopes if scopes is not None else LOGIN_SCOPES
     client_config = {
         "web": {
             "client_id": settings.GMAIL_CLIENT_ID,
@@ -35,7 +42,7 @@ def get_google_flow():
             "token_uri": "https://oauth2.googleapis.com/token",
         }
     }
-    flow = Flow.from_client_config(client_config, scopes=SCOPES)
+    flow = Flow.from_client_config(client_config, scopes=target_scopes)
     flow.redirect_uri = settings.GMAIL_REDIRECT_URI
     return flow
 
@@ -60,7 +67,7 @@ def email_status(db: Session = Depends(get_db), user: m.User = Depends(get_curre
 @router.get("/oauth-url")
 def get_oauth_url(request: Request, user: m.User = Depends(get_current_user)):
     try:
-        flow = get_google_flow()
+        flow = get_google_flow(scopes=GMAIL_SCOPES)
         origin = request.query_params.get("redirect") or request.headers.get("origin") or ""
         state = f"connect:{user.id}:{origin}"
         authorization_url, _ = flow.authorization_url(
@@ -76,7 +83,7 @@ def get_oauth_url(request: Request, user: m.User = Depends(get_current_user)):
 @router.get("/oauth-login-url")
 def get_oauth_login_url(request: Request):
     try:
-        flow = get_google_flow()
+        flow = get_google_flow(scopes=LOGIN_SCOPES)
         origin = request.query_params.get("redirect") or request.headers.get("origin") or ""
         state = f"login:{origin}"
         authorization_url, _ = flow.authorization_url(
@@ -125,7 +132,7 @@ def oauth_callback(request: Request, db: Session = Depends(get_db)):
         return RedirectResponse(url=f"{redirect_target}?error=no_code")
 
     try:
-        flow = get_google_flow()
+        flow = get_google_flow(scopes=LOGIN_SCOPES if is_login else GMAIL_SCOPES)
         flow.fetch_token(code=code)
         creds = flow.credentials
 
@@ -279,3 +286,50 @@ async def sync_now(db: Session = Depends(get_db), user: m.User = Depends(get_cur
         raise HTTPException(status_code=400, detail="No connected email account.")
     await email_monitor.sync_now(account.id)
     return {"status": "sync_complete"}
+
+
+from pydantic import BaseModel
+
+class ImapConnectRequest(BaseModel):
+    email_address: str
+    app_password: str
+
+@router.post("/connect-imap")
+def connect_imap(payload: ImapConnectRequest, db: Session = Depends(get_db), user: m.User = Depends(get_current_user)):
+    import imaplib
+    email_addr = payload.email_address.strip()
+    pwd = payload.app_password.replace(" ", "").strip()
+    if not email_addr or not pwd:
+        raise HTTPException(status_code=400, detail="Email and App Password are required.")
+    
+    try:
+        mail = imaplib.IMAP4_SSL("imap.gmail.com", 993)
+        mail.login(email_addr, pwd)
+        mail.logout()
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Failed to connect to Gmail with App Password: {str(e)}")
+
+    encrypted = encrypt_credential(pwd)
+    account = db.query(m.EmailAccount).filter_by(user_id=user.id).first()
+    if account:
+        account.email_address = email_addr
+        account.provider = "gmail"
+        account.auth_method = "imap_app_password"
+        account.encrypted_credential = encrypted
+        account.connected = True
+        account.monitoring_active = True
+    else:
+        account = m.EmailAccount(
+            user_id=user.id,
+            email_address=email_addr,
+            provider="gmail",
+            auth_method="imap_app_password",
+            encrypted_credential=encrypted,
+            connected=True,
+            monitoring_active=True
+        )
+        db.add(account)
+    db.commit()
+    email_monitor.start_monitoring(account.id, account.poll_interval_seconds)
+    return {"connected": True, "email_address": email_addr, "monitoring_active": True}
+

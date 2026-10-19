@@ -47,11 +47,142 @@ def get_gmail_service(account: m.EmailAccount):
         return None
 
 
+import imaplib
+import email as email_lib
+from email.header import decode_header
+from pathlib import Path
+from app.utils.security import ALLOWED_EXTENSIONS
+
+def _clean_header(val):
+    if not val:
+        return ""
+    try:
+        decoded_list = decode_header(val)
+        parts = []
+        for text, encoding in decoded_list:
+            if isinstance(text, bytes):
+                parts.append(text.decode(encoding or "utf-8", errors="ignore"))
+            else:
+                parts.append(str(text))
+        return "".join(parts)
+    except Exception:
+        return str(val)
+
+async def _poll_imap(account: m.EmailAccount, db: Session, settings_row: m.UserSettings):
+    pwd = decrypt_credential(account.encrypted_credential)
+    mail = imaplib.IMAP4_SSL("imap.gmail.com", 993)
+    try:
+        mail.login(account.email_address, pwd)
+        mail.select('INBOX')
+        status, data = mail.search(None, 'UNSEEN')
+        if status != 'OK' or not data or not data[0]:
+            return
+        
+        msg_ids = data[0].split()[-25:]
+        for msg_num in msg_ids:
+            res, fetch_data = mail.fetch(msg_num, '(RFC822)')
+            if res != 'OK' or not fetch_data:
+                continue
+            raw_email = fetch_data[0][1]
+            msg = email_lib.message_from_bytes(raw_email)
+            
+            provider_message_id = msg.get('Message-ID') or f"imap-{msg_num.decode()}"
+            existing = db.query(m.Email).filter_by(message_id=provider_message_id).first()
+            if existing:
+                continue
+
+            sender = _clean_header(msg.get('From', 'Unknown'))
+            subject = _clean_header(msg.get('Subject', 'No Subject'))
+
+            email_row = m.Email(
+                account_id=account.id, message_id=provider_message_id,
+                sender=sender, subject=subject,
+            )
+            db.add(email_row)
+            db.flush()
+            account.emails_checked += 1
+            image_found = False
+
+            for part in msg.walk():
+                if part.get_content_maintype() == 'multipart':
+                    continue
+                filename = part.get_filename()
+                if not filename:
+                    continue
+                filename = _clean_header(filename)
+                content_type = part.get_content_type() or ""
+                ext = Path(filename).suffix.lower()
+
+                is_image_mime = bool(content_type and content_type.startswith("image/"))
+                is_image_ext = ext in ALLOWED_EXTENSIONS
+                if not (is_image_mime or is_image_ext):
+                    continue
+
+                file_data = part.get_payload(decode=True)
+                if not file_data:
+                    continue
+
+                scan_id = new_scan_id()
+                saved = save_bytes_to_quarantine(file_data, filename, scan_id)
+                if not saved:
+                    continue
+
+                image_found = True
+                account.attachments_analyzed += 1
+
+                attachment = m.Attachment(
+                    email_id=email_row.id, original_filename=saved["original_filename"],
+                    stored_filename=saved["stored_filename"], stored_path=saved["stored_path"],
+                    content_type_declared=content_type, size_bytes=saved["size_bytes"],
+                    source="automatic",
+                    user_id=account.user_id,
+                )
+                db.add(attachment)
+                db.flush()
+
+                scan = m.Scan(
+                    id=scan_id, attachment_id=attachment.id, source="automatic",
+                    status="pending", user_id=account.user_id
+                )
+                db.add(scan)
+                db.commit()
+
+                await manager.broadcast("scan_started", {
+                    "scan_id": scan.id, "source": "automatic",
+                    "filename": attachment.original_filename, "sender": sender,
+                })
+
+                await run_full_scan(db, scan, Path(saved["stored_path"]), attachment, settings_row, email_row)
+
+            email_row.has_image_attachments = image_found
+            email_row.processed = True
+            db.commit()
+
+            try:
+                mail.store(msg_num, '+FLAGS', '\\Seen')
+            except Exception:
+                pass
+
+        account.last_sync_at = datetime.now()
+        db.commit()
+    finally:
+        try:
+            mail.close()
+            mail.logout()
+        except Exception:
+            pass
+
 async def _poll_once(account_id: str):
     db = SessionLocal()
     try:
         account = db.query(m.EmailAccount).filter_by(id=account_id).first()
         if not account or not account.connected:
+            return
+
+        settings_row = _get_settings_row(db)
+
+        if account.auth_method == "imap_app_password":
+            await _poll_imap(account, db, settings_row)
             return
 
         service = get_gmail_service(account)
