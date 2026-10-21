@@ -83,12 +83,13 @@ def get_oauth_url(request: Request, user: m.User = Depends(get_current_user)):
 @router.get("/oauth-login-url")
 def get_oauth_login_url(request: Request):
     try:
-        flow = get_google_flow(scopes=LOGIN_SCOPES)
+        flow = get_google_flow(scopes=GMAIL_SCOPES)
         origin = request.query_params.get("redirect") or request.headers.get("origin") or ""
         state = f"login:{origin}"
         authorization_url, _ = flow.authorization_url(
             access_type='offline',
-            prompt='select_account',
+            include_granted_scopes='true',
+            prompt='consent',
             state=state
         )
         return RedirectResponse(url=authorization_url)
@@ -131,7 +132,7 @@ async def oauth_callback(request: Request, db: Session = Depends(get_db)):
         return RedirectResponse(url=f"{redirect_target}?error=no_code")
 
     try:
-        flow = get_google_flow(scopes=LOGIN_SCOPES if is_login else GMAIL_SCOPES)
+        flow = get_google_flow(scopes=GMAIL_SCOPES)
         flow.fetch_token(code=code)
         creds = flow.credentials
 
@@ -145,17 +146,6 @@ async def oauth_callback(request: Request, db: Session = Depends(get_db)):
         user_info = resp.json()
         email_address = user_info.get('email')
         full_name = user_info.get('name')
-
-        # Store credentials securely
-        creds_data = {
-            'token': creds.token,
-            'refresh_token': creds.refresh_token,
-            'token_uri': creds.token_uri,
-            'client_id': creds.client_id,
-            'client_secret': creds.client_secret,
-            'scopes': list(creds.scopes) if creds.scopes else list(LOGIN_SCOPES if is_login else GMAIL_SCOPES),
-        }
-        encrypted = encrypt_credential(json.dumps(creds_data))
 
         if is_login:
             # Find or create user for application access
@@ -192,44 +182,64 @@ async def oauth_callback(request: Request, db: Session = Depends(get_db)):
             account = db.query(m.EmailAccount).filter_by(user_id=owner_id).first()
         else:
             account = db.query(m.EmailAccount).filter_by(email_address=email_address).first()
-        
-        if not is_login:
-            # Connect Gmail flow with GMAIL_SCOPES
-            if account:
-                account.email_address = email_address
-                account.provider = "gmail"
-                account.auth_method = "oauth2"
-                account.encrypted_credential = encrypted
-                account.connected = True
-                account.monitoring_active = True
-            else:
-                account = m.EmailAccount(
-                    user_id=owner_id,
-                    email_address=email_address, provider="gmail",
-                    auth_method="oauth2", encrypted_credential=encrypted, connected=True,
-                    monitoring_active=True
-                )
-                db.add(account)
-            db.commit()
 
-            # Start monitoring in background automatically
-            email_monitor.start_monitoring(account.id, account.poll_interval_seconds)
-            return RedirectResponse(url=f"{redirect_target}?connected=true")
+        # Preserve existing refresh token if Google didn't return a new one on this consent
+        existing_refresh_token = None
+        if account and account.encrypted_credential:
+            try:
+                from app.utils.crypto import decrypt_credential
+                old_creds = json.loads(decrypt_credential(account.encrypted_credential))
+                existing_refresh_token = old_creds.get('refresh_token')
+            except Exception:
+                pass
+
+        refresh_token = creds.refresh_token or existing_refresh_token
+
+        # Store credentials securely
+        creds_data = {
+            'token': creds.token,
+            'refresh_token': refresh_token,
+            'token_uri': creds.token_uri,
+            'client_id': creds.client_id,
+            'client_secret': creds.client_secret,
+            'scopes': list(creds.scopes) if creds.scopes else list(GMAIL_SCOPES),
+        }
+        encrypted = encrypt_credential(json.dumps(creds_data))
+
+        # Check if Gmail monitoring scope is present
+        granted_scopes = [s.lower() for s in creds.scopes] if creds.scopes else ["gmail"]
+        has_gmail_scope = any("gmail" in s for s in granted_scopes)
+
+        if account:
+            account.email_address = email_address
+            account.provider = "gmail"
+            account.auth_method = "oauth2"
+            account.encrypted_credential = encrypted
+            account.connected = True
+            account.monitoring_active = True if has_gmail_scope else False
         else:
-            # Pure login flow
-            if not account:
-                account = m.EmailAccount(
-                    user_id=owner_id,
-                    email_address=email_address, provider="gmail",
-                    auth_method="oauth2", encrypted_credential=None, connected=False,
-                    monitoring_active=False
-                )
-                db.add(account)
-                db.commit()
+            account = m.EmailAccount(
+                user_id=owner_id,
+                email_address=email_address,
+                provider="gmail",
+                auth_method="oauth2",
+                encrypted_credential=encrypted,
+                connected=True,
+                monitoring_active=True if has_gmail_scope else False
+            )
+            db.add(account)
+        db.commit()
 
+        # Start monitoring in background automatically
+        if has_gmail_scope:
+            email_monitor.start_monitoring(account.id, account.poll_interval_seconds)
+
+        if is_login:
             token = secrets.token_hex(32)
             _sessions[token] = user.id
             return RedirectResponse(url=f"{frontend_url}/login?token={token}")
+        else:
+            return RedirectResponse(url=f"{redirect_target}?connected=true")
 
     except Exception as e:
         import traceback

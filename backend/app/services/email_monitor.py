@@ -303,6 +303,16 @@ async def _poll_once(account_id: str):
 
     except Exception as exc:  # noqa: BLE001
         logger.error("Email poll failed: %s", exc)
+        if "insufficientPermissions" in str(exc) or "insufficient authentication scopes" in str(exc).lower():
+            logger.info("Disabling active Gmail API monitoring for account %s due to insufficient scopes", account_id)
+            try:
+                if account:
+                    account.monitoring_active = False
+                    account.connected = False
+                    db.commit()
+                stop_monitoring(account_id)
+            except Exception:
+                pass
     finally:
         db.close()
 
