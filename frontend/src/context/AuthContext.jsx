@@ -16,7 +16,7 @@ export function AuthProvider({ children }) {
   const [loading, setLoading] = useState(false)
 
   useEffect(() => {
-    if (token && !user) {
+    if (token) {
       getMe()
         .then(u => {
           setUser(u)
@@ -30,7 +30,7 @@ export function AuthProvider({ children }) {
           setUser(null)
         })
     }
-  }, [token, user])
+  }, [token])
 
   useEffect(() => {
     const unauthorizedHandler = () => {

@@ -4,6 +4,7 @@ import { ScanSearch, ShieldAlert, ShieldCheck, ShieldX, Mail, RefreshCcw, Sparkl
 import { useNavigate } from 'react-router-dom'
 import { getDashboardStats, seedDemoData } from '../services/api.js'
 import { useNotifications } from '../context/NotificationContext.jsx'
+import { useAuth } from '../context/AuthContext.jsx'
 import StatCard from '../components/dashboard/StatCard.jsx'
 import RiskGauge from '../components/common/RiskGauge.jsx'
 import ErrorPanel from '../components/common/ErrorPanel.jsx'
@@ -12,6 +13,7 @@ import { riskMeta } from '../utils/risk.js'
 const COLORS = { SAFE: '#22c55e', LOW: '#38bdf8', MEDIUM: '#eab308', HIGH: '#f97316', CRITICAL: '#ef4444' }
 
 export default function Dashboard() {
+  const { user } = useAuth()
   const [stats, setStats] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
@@ -59,6 +61,29 @@ export default function Dashboard() {
 
   return (
     <div className="space-y-6">
+      {/* Active User Information Banner */}
+      <div className="glass rounded-xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 border border-hata-border/70 shadow-sm">
+        <div>
+          <h2 className="text-base font-bold text-hata-text">
+            Welcome, <span className="text-hata-accent">{user?.full_name || user?.email?.split('@')[0] || user?.username}</span>
+          </h2>
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1 text-xs text-hata-muted">
+            <span>Registered Email: <strong className="text-hata-text">{user?.email || 'None'}</strong></span>
+            <span>&bull;</span>
+            <span>Account: <strong className="text-hata-text">@{user?.username}</strong></span>
+            <span>&bull;</span>
+            <span className="capitalize text-[10px] px-2 py-0.5 rounded-full bg-hata-accent/15 text-hata-accent font-semibold border border-hata-accent/30">
+              {user?.role || 'Analyst'}
+            </span>
+          </div>
+        </div>
+        <div className="flex items-center gap-2 text-xs">
+          <span className="text-hata-muted">Monitored Mailbox:</span>
+          <span className={`px-2.5 py-1 rounded-md font-semibold text-xs ${stats?.monitoring?.connected ? 'bg-risk-safe/15 text-risk-safe border border-risk-safe/30' : 'bg-hata-panel text-hata-muted border border-hata-border'}`}>
+            {stats?.monitoring?.connected ? stats.monitoring.email_address : 'Not connected'}
+          </span>
+        </div>
+      </div>
       {!hasAnyData && (
         <div className="glass rounded-xl p-5 flex items-center justify-between gap-4 border-hata-accent/30">
           <div className="flex items-center gap-3">

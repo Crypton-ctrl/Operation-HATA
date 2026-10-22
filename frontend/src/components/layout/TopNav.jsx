@@ -145,28 +145,31 @@ export default function TopNav({ title, subtitle, onLogout }) {
         <div className="relative" ref={userRef}>
           <button
             onClick={() => setUserOpen(!userOpen)}
-            className="focus-ring flex items-center gap-2 px-2.5 py-1.5 rounded-lg border border-hata-border hover:border-hata-accent/40 bg-hata-panel/50 hover:bg-white/5 transition-all text-xs"
+            className="focus-ring flex items-center gap-2.5 px-3 py-1.5 rounded-lg border border-hata-border hover:border-hata-accent/40 bg-hata-panel/50 hover:bg-white/5 transition-all text-xs"
           >
-            <div className="w-6 h-6 rounded-full bg-gradient-to-tr from-hata-accent to-hata-accent2 text-hata-bg font-bold flex items-center justify-center text-[11px] uppercase shadow-sm">
-              {user?.username ? user.username.slice(0, 2) : 'OP'}
+            <div className="w-7 h-7 rounded-full bg-gradient-to-tr from-hata-accent to-hata-accent2 text-hata-bg font-bold flex items-center justify-center text-xs uppercase shadow-sm">
+              {user?.full_name ? user.full_name.slice(0, 2) : (user?.username ? user.username.slice(0, 2) : 'OP')}
             </div>
             <div className="hidden sm:flex flex-col text-left">
-              <span className="text-xs font-bold text-hata-text truncate max-w-[100px]">
-                {user?.full_name || user?.username || 'Operator'}
+              <span className="text-xs font-bold text-hata-text truncate max-w-[150px]">
+                {user?.full_name || user?.email?.split('@')[0] || user?.username || 'Operator'}
               </span>
-              <span className="text-[10px] text-hata-muted capitalize truncate max-w-[100px]">
-                {user?.role || 'Analyst'}
+              <span className="text-[10px] text-hata-accent truncate max-w-[150px] font-medium">
+                {user?.email || `@${user?.username}`}
               </span>
             </div>
             <ChevronDown className="w-3 h-3 text-hata-muted" />
           </button>
 
           {userOpen && (
-            <div className="absolute right-0 mt-2 w-56 glass rounded-xl shadow-2xl z-40 border border-hata-border py-2 overflow-hidden">
+            <div className="absolute right-0 mt-2 w-64 glass rounded-xl shadow-2xl z-40 border border-hata-border py-2 overflow-hidden">
               <div className="px-4 py-2.5 border-b border-hata-border/70">
                 <div className="text-xs font-bold text-hata-text">{user?.full_name || user?.username}</div>
-                <div className="text-[11px] text-hata-muted">@{user?.username}</div>
-                <span className="inline-block mt-1 text-[10px] font-semibold uppercase px-2 py-0.5 rounded-full bg-hata-accent/15 text-hata-accent border border-hata-accent/30">
+                {user?.email && (
+                  <div className="text-[11px] text-hata-accent font-medium truncate mt-0.5">{user.email}</div>
+                )}
+                <div className="text-[10px] text-hata-muted">@{user?.username}</div>
+                <span className="inline-block mt-1.5 text-[10px] font-semibold uppercase px-2 py-0.5 rounded-full bg-hata-accent/15 text-hata-accent border border-hata-accent/30">
                   {user?.role || 'Security Analyst'}
                 </span>
               </div>

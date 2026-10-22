@@ -33,6 +33,7 @@ export default function Login({ onSuccess }) {
 
     if (urlToken) {
       sessionStorage.setItem('hata_token', urlToken)
+      sessionStorage.removeItem('hata_user')
       window.location.href = '/' // Strip token from URL and let AuthContext fetch user
     }
     
@@ -78,10 +79,28 @@ export default function Login({ onSuccess }) {
     }
   }
 
-  const handleGoogleLogin = () => {
-    const backendUrl = import.meta.env.VITE_API_BASE_URL || '/api'
-    const origin = encodeURIComponent(window.location.origin)
-    window.location.href = `${backendUrl}/emails/oauth-login-url?redirect=${origin}`
+  const handleGoogleLogin = async () => {
+    try {
+      const backendUrl = import.meta.env.VITE_API_BASE_URL || '/api'
+      const origin = encodeURIComponent(window.location.origin)
+      // Fetch the Google OAuth URL as JSON from the backend, then redirect the browser
+      // there ourselves. Letting window.location point at the proxy URL causes Vite to
+      // swallow the 302 on the server side so the browser never reaches Google's page.
+      const res = await fetch(`${backendUrl}/emails/oauth-login-url?redirect=${origin}`)
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}))
+        setError(err.detail || 'Failed to get Google login URL.')
+        return
+      }
+      const { url } = await res.json()
+      if (url) {
+        window.location.href = url
+      } else {
+        setError('Server did not return a Google login URL.')
+      }
+    } catch (err) {
+      setError('Could not connect to server for Google login.')
+    }
   }
 
 

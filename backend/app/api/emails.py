@@ -92,7 +92,10 @@ def get_oauth_login_url(request: Request):
             prompt='consent',
             state=state
         )
-        return RedirectResponse(url=authorization_url)
+        # Return JSON so the frontend can redirect the browser itself.
+        # Using RedirectResponse here causes Vite's dev-proxy to swallow the 302
+        # before the browser can follow it to Google's consent page.
+        return {"url": authorization_url}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -169,6 +172,13 @@ async def oauth_callback(request: Request, db: Session = Depends(get_db)):
                     role="analyst"
                 )
                 db.add(user)
+                db.commit()
+            else:
+                # Sync Google profile details if full_name is missing or placeholder
+                if full_name and (not user.full_name or user.full_name in ['admin', 'adminn', user.username]):
+                    user.full_name = full_name
+                if not user.email:
+                    user.email = email_address
                 db.commit()
             
             owner_id = user.id
