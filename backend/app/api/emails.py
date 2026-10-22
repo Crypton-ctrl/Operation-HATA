@@ -148,10 +148,10 @@ async def oauth_callback(request: Request, db: Session = Depends(get_db)):
         resp.raise_for_status()
         user_info = resp.json()
         email_address = user_info.get('email')
-        full_name = user_info.get('name')
+        full_name = user_info.get('name') or user_info.get('given_name') or (email_address.split('@')[0] if email_address else "User")
 
         if is_login:
-            # Find or create user for application access
+            # Find or create user for application access dynamically from Google profile
             user = db.query(m.User).filter_by(email=email_address).first()
             if not user:
                 base_username = email_address.split('@')[0].replace('.', '_').replace('-', '_')
@@ -167,17 +167,17 @@ async def oauth_callback(request: Request, db: Session = Depends(get_db)):
                     username=username,
                     password_hash=hash_password(pwd, salt),
                     salt=salt,
-                    full_name=full_name or username,
+                    full_name=full_name,
                     email=email_address,
                     role="analyst"
                 )
                 db.add(user)
                 db.commit()
             else:
-                # Sync Google profile details if full_name is missing or placeholder
-                if full_name and (not user.full_name or user.full_name in ['admin', 'adminn', user.username]):
+                # Always update the name and email directly from the Google userinfo response
+                if full_name:
                     user.full_name = full_name
-                if not user.email:
+                if email_address:
                     user.email = email_address
                 db.commit()
             
