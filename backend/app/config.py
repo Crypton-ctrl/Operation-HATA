@@ -12,7 +12,10 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_file=str(BASE_DIR / ".env"), extra="ignore")
+    model_config = SettingsConfigDict(
+        env_file=(str(BASE_DIR / ".env.example"), str(BASE_DIR / ".env")),
+        extra="ignore"
+    )
 
     SECRET_KEY: str = "insecure-dev-key-change-me"
     ENVIRONMENT: str = "development"
