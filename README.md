@@ -225,28 +225,24 @@ available.") is generated instead — see `app/services/ai_analyzer.py`.
 
 ---
 
-## 8. Gmail Setup
+## 8. Gmail Threat Monitoring Setup
 
-The reference implementation authenticates via **IMAP with a Gmail App
-Password** — simpler to set up for a demo/coursework environment than a full
-OAuth consent screen, and credentials are still never stored in plaintext
-(encrypted with Fernet, derived from `SECRET_KEY`, before being written to the
-database).
+Operation HATA supports two zero-friction methods for automatic email attachment monitoring:
 
-1. Enable 2-Step Verification on the Gmail account.
-2. Go to **myaccount.google.com → Security → App Passwords** and generate one.
-3. In HATA, go to **Automatic Monitoring**, enter the Gmail address and the
-   16-character app password, and click **Connect Gmail**.
-4. Click **START MONITORING**.
+### Option A: Google Sign-In & Gmail API (OAuth 2.0)
+1. Ensure the **Gmail API** is enabled in your Google Cloud Project:
+   👉 [Enable Gmail API (Project 21036781955)](https://console.cloud.google.com/apis/api/gmail.googleapis.com/overview?project=21036781955)
+2. On the HATA Login page, click **"Continue with Google"**.
+3. On Google's OAuth consent screen:
+   - Make sure to tick the checkbox next to **"Read your email messages"** (sensitive scopes are unchecked by default by Google).
+4. You will be authenticated dynamically, and HATA will automatically begin monitoring your mailbox for incoming suspicious image attachments!
 
-**OAuth2 (production path):** the codebase already includes the credential
-storage model needed for OAuth (`EmailAccount.encrypted_credential` can hold
-an encrypted refresh token just as easily as an app password) and a
-`GMAIL_CLIENT_ID`/`GMAIL_CLIENT_SECRET`/`GMAIL_REDIRECT_URI` config surface.
-To complete OAuth2, register credentials in Google Cloud Console, implement
-the `/api/emails/oauth/callback` exchange, and swap the IMAP fetch in
-`app/services/email_monitor.py` for a Gmail API client — the rest of the
-pipeline (quarantine → analysis → risk → AI → report) is unchanged.
+### Option B: Gmail App Password (IMAP — Zero-Config)
+If you prefer not to configure Google Cloud OAuth or test users:
+1. Enable 2-Step Verification on your Gmail account.
+2. Go to **[myaccount.google.com/apppasswords](https://myaccount.google.com/apppasswords)** and generate a 16-letter App Password (e.g. `abcd efgh ijkl mnop`).
+3. In HATA, navigate to **Automatic Monitoring**, select **"Gmail App Password (Recommended)"**, enter your Gmail address and the 16-character password, and click **Connect & Start Monitoring**.
+4. HATA will connect directly via IMAP and continuously scan incoming image attachments.
 
 ---
 
