@@ -54,7 +54,7 @@ export default function AutomaticMonitoring() {
   }, [location, navigate, load])
 
   const handleConnect = async (e) => {
-    e.preventDefault()
+    e?.preventDefault?.()
     setBusy(true); setError(null)
     try {
       const { url } = await getOAuthUrl(window.location.origin)
@@ -240,6 +240,34 @@ export default function AutomaticMonitoring() {
                 {status.monitoring_active ? 'MONITORING ACTIVE' : 'MONITORING PAUSED'}
               </span>
             </div>
+
+            {status.auth_method === 'oauth2' && status.has_gmail_scope === false && (
+              <div className="p-4 rounded-xl bg-risk-critical/10 border border-risk-critical/30 space-y-2">
+                <div className="flex items-center gap-2 font-semibold text-risk-critical text-xs">
+                  <AlertCircle className="w-4 h-4 shrink-0" />
+                  <span>Gmail Read Permission Required</span>
+                </div>
+                <p className="text-xs text-hata-muted">
+                  Google logged you in, but the <strong>"Read your email messages"</strong> permission checkbox was not checked during sign-in.
+                </p>
+                <div className="flex flex-wrap gap-2 pt-1">
+                  <button 
+                    type="button" 
+                    onClick={handleConnect} 
+                    className="px-3 py-1.5 rounded-lg text-xs font-bold bg-hata-accent text-hata-bg hover:opacity-90 shadow-sm"
+                  >
+                    Re-connect & Check Gmail Box
+                  </button>
+                  <button 
+                    type="button" 
+                    onClick={handleDisconnect} 
+                    className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-hata-panel2 border border-hata-border text-hata-text hover:bg-white/5"
+                  >
+                    Or Disconnect & Use App Password
+                  </button>
+                </div>
+              </div>
+            )}
 
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs text-hata-muted bg-hata-panel/50 p-4 rounded-xl border border-hata-border/70">
               <div>

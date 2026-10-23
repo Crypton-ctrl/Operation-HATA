@@ -65,6 +65,17 @@ def email_status(db: Session = Depends(get_db), user: m.User = Depends(get_curre
             "last_sync_at": None, "emails_checked": 0, "attachments_analyzed": 0,
         }
 
+    has_gmail_scope = True
+    if account.auth_method == "oauth2" and account.encrypted_credential:
+        try:
+            from app.utils.crypto import decrypt_credential
+            creds_json = decrypt_credential(account.encrypted_credential)
+            creds_data = json.loads(creds_json)
+            scopes = [s.lower() for s in creds_data.get('scopes', [])]
+            has_gmail_scope = any("gmail" in s for s in scopes)
+        except Exception:
+            pass
+
     # Auto-heal: Ensure background task is running if monitoring is active
     is_running = email_monitor.is_monitoring_running(account.id)
     if account.monitoring_active and not is_running:
@@ -75,6 +86,7 @@ def email_status(db: Session = Depends(get_db), user: m.User = Depends(get_curre
         "connected": account.connected,
         "email_address": account.email_address,
         "monitoring_active": account.monitoring_active and is_running,
+        "has_gmail_scope": has_gmail_scope,
         "last_sync_at": account.last_sync_at,
         "emails_checked": account.emails_checked,
         "attachments_analyzed": account.attachments_analyzed,
@@ -336,7 +348,9 @@ async def sync_now(db: Session = Depends(get_db), user: m.User = Depends(get_cur
     account = db.query(m.EmailAccount).filter_by(user_id=user.id).first()
     if not account or not account.connected:
         raise HTTPException(status_code=400, detail="No connected email account. Please connect an account first.")
-    await email_monitor.sync_now(account.id)
+    res = await email_monitor.sync_now(account.id)
+    if res and not res.get("success"):
+        raise HTTPException(status_code=400, detail=res.get("error", "Failed to sync emails"))
     db.refresh(account)
     return {
         "status": "sync_complete",

@@ -132,6 +132,9 @@ async def _poll_imap(account: m.EmailAccount, db: Session, settings_row: m.UserS
         else:
             msg_ids = msg_ids[-25:]
 
+        new_emails = 0
+        new_attachments = 0
+
         for msg_num in msg_ids:
             res, fetch_data = mail.fetch(msg_num, '(RFC822)')
             if res != 'OK' or not fetch_data:
@@ -156,6 +159,7 @@ async def _poll_imap(account: m.EmailAccount, db: Session, settings_row: m.UserS
             db.add(email_row)
             db.flush()
             account.emails_checked += 1
+            new_emails += 1
             image_found = False
 
             for part in msg.walk():
@@ -192,6 +196,7 @@ async def _poll_imap(account: m.EmailAccount, db: Session, settings_row: m.UserS
 
                 image_found = True
                 account.attachments_analyzed += 1
+                new_attachments += 1
 
                 attachment = m.Attachment(
                     email_id=email_row.id, original_filename=saved["original_filename"],
@@ -228,6 +233,7 @@ async def _poll_imap(account: m.EmailAccount, db: Session, settings_row: m.UserS
 
         account.last_sync_at = datetime.now()
         db.commit()
+        return {"emails_checked": new_emails, "attachments_analyzed": new_attachments}
     finally:
         try:
             mail.close()
@@ -241,18 +247,19 @@ async def _poll_once(account_id: str):
     try:
         account = db.query(m.EmailAccount).filter_by(id=account_id).first()
         if not account or not account.connected:
-            return
+            return {"success": False, "error": "Email account is not connected"}
 
         settings_row = _get_settings_row(db)
 
         if account.auth_method == "imap_app_password":
-            await _poll_imap(account, db, settings_row)
-            return
+            res = await _poll_imap(account, db, settings_row)
+            return {"success": True, "details": res}
 
         service = get_gmail_service(account, db=db)
         if not service:
-            logger.warning(f"Could not initialize Gmail service for account {account.email_address}")
-            return
+            err = f"Could not initialize Gmail service for account {account.email_address}. Please reconnect."
+            logger.warning(err)
+            return {"success": False, "error": err}
 
         settings_row = _get_settings_row(db)
 
@@ -266,6 +273,9 @@ async def _poll_once(account_id: str):
 
         messages = results.get('messages', [])
         logger.info(f"Gmail poll for {account.email_address}: found {len(messages)} candidate messages")
+
+        new_emails = 0
+        new_attachments = 0
 
         for msg_ref in messages:
             msg_id = msg_ref['id']
@@ -288,6 +298,7 @@ async def _poll_once(account_id: str):
             db.add(email_row)
             db.flush()
             account.emails_checked += 1
+            new_emails += 1
             image_found = False
 
             # Recursively find all parts with image data (handles root payload, nested parts, and inline attachments)
@@ -355,6 +366,7 @@ async def _poll_once(account_id: str):
 
                 image_found = True
                 account.attachments_analyzed += 1
+                new_attachments += 1
 
                 attachment = m.Attachment(
                     email_id=email_row.id, original_filename=saved["original_filename"],
@@ -394,18 +406,18 @@ async def _poll_once(account_id: str):
 
         account.last_sync_at = datetime.now()
         db.commit()
+        return {"success": True, "emails_checked": new_emails, "attachments_analyzed": new_attachments}
 
     except Exception as exc:  # noqa: BLE001
-        logger.error(f"Email poll failed for account {account_id}: {exc}", exc_info=True)
-        if "insufficientPermissions" in str(exc) or "insufficient authentication scopes" in str(exc).lower():
-            logger.warning(f"Account {account_id} lacks Gmail API scope. Keeping connection alive but pausing monitoring.")
-            try:
-                if account:
-                    account.monitoring_active = False
-                    db.commit()
-                stop_monitoring(account_id)
-            except Exception:
-                pass
+        err_msg = str(exc)
+        logger.error(f"Email poll failed for account {account_id}: {err_msg}", exc_info=True)
+        if "insufficientPermissions" in err_msg or "insufficient authentication scopes" in err_msg.lower():
+            readable_err = "Gmail Read permission not granted by Google. Please re-connect Gmail and tick the checkbox for Gmail access."
+            return {"success": False, "error": readable_err}
+        if "accessNotConfigured" in err_msg or "has not been used in project" in err_msg.lower():
+            readable_err = "Gmail API is not enabled in Google Cloud Console. Enable it at: https://console.cloud.google.com/apis/api/gmail.googleapis.com/overview?project=21036781955"
+            return {"success": False, "error": readable_err}
+        return {"success": False, "error": err_msg}
     finally:
         db.close()
 
@@ -460,4 +472,4 @@ def stop_monitoring(account_id: str):
 
 
 async def sync_now(account_id: str):
-    await _poll_once(account_id)
+    return await _poll_once(account_id)
