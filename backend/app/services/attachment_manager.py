@@ -78,9 +78,27 @@ def save_bytes_to_quarantine(contents: bytes, original_name: str, scan_id: str) 
     """Used by the email monitor to place downloaded attachments into quarantine."""
     original_name = sanitize_filename(original_name)
     ext = Path(original_name).suffix.lower()
-    if ext not in ALLOWED_EXTENSIONS:
-        return None
     detected_format = detect_image_format(contents[:64])
+
+    if ext not in ALLOWED_EXTENSIONS:
+        if detected_format == "JPEG":
+            original_name += ".jpg"
+            ext = ".jpg"
+        elif detected_format == "PNG":
+            original_name += ".png"
+            ext = ".png"
+        elif detected_format == "GIF":
+            original_name += ".gif"
+            ext = ".gif"
+        elif detected_format == "WEBP":
+            original_name += ".webp"
+            ext = ".webp"
+        elif detected_format == "BMP":
+            original_name += ".bmp"
+            ext = ".bmp"
+        else:
+            return None
+
     if len(contents) > settings.max_upload_bytes:
         return None
 

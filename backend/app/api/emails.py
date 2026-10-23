@@ -9,7 +9,7 @@ from app.models import models as m
 from app.schemas.schemas import MonitoringIntervalRequest
 from app.utils.crypto import encrypt_credential
 from app.services import email_monitor
-from app.config import get_settings
+from app.config import get_settings, DEFAULT_CLIENT_ID, DEFAULT_CLIENT_SECRET
 from app.api.auth import get_current_user, _sessions, hash_password
 from google_auth_oauthlib.flow import Flow
 from google.oauth2.credentials import Credentials
@@ -37,9 +37,9 @@ def get_google_flow(scopes=None):
 
     # Zero-configuration defaults for cloned repositories
     if not client_id:
-        client_id = "21036781955-kh4grqlv14mr1fdn5kh938sq090elfae.apps.googleusercontent.com"
+        client_id = DEFAULT_CLIENT_ID
     if not client_secret:
-        client_secret = "GOCSPX" + "-" + "f9Pvl3U5Pu57zPoYpWWqK2wGKNsg"
+        client_secret = DEFAULT_CLIENT_SECRET
     if not redirect_uri:
         redirect_uri = "http://localhost:8000/api/emails/oauth/callback"
 
@@ -64,14 +64,22 @@ def email_status(db: Session = Depends(get_db), user: m.User = Depends(get_curre
             "connected": False, "email_address": None, "monitoring_active": False,
             "last_sync_at": None, "emails_checked": 0, "attachments_analyzed": 0,
         }
+
+    # Auto-heal: Ensure background task is running if monitoring is active
+    is_running = email_monitor.is_monitoring_running(account.id)
+    if account.monitoring_active and not is_running:
+        email_monitor.start_monitoring(account.id, account.poll_interval_seconds)
+        is_running = email_monitor.is_monitoring_running(account.id)
+
     return {
         "connected": account.connected,
         "email_address": account.email_address,
-        "monitoring_active": account.monitoring_active,
+        "monitoring_active": account.monitoring_active and is_running,
         "last_sync_at": account.last_sync_at,
         "emails_checked": account.emails_checked,
         "attachments_analyzed": account.attachments_analyzed,
         "poll_interval_seconds": account.poll_interval_seconds,
+        "auth_method": account.auth_method,
     }
 
 @router.get("/oauth-url")
@@ -103,8 +111,6 @@ def get_oauth_login_url(request: Request):
             state=state
         )
         # Return JSON so the frontend can redirect the browser itself.
-        # Using RedirectResponse here causes Vite's dev-proxy to swallow the 302
-        # before the browser can follow it to Google's consent page.
         return {"url": authorization_url}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -215,13 +221,17 @@ async def oauth_callback(request: Request, db: Session = Depends(get_db)):
 
         refresh_token = creds.refresh_token or existing_refresh_token
 
-        # Store credentials securely
+        client_id = creds.client_id or settings.GMAIL_CLIENT_ID or DEFAULT_CLIENT_ID
+        client_secret = creds.client_secret or settings.GMAIL_CLIENT_SECRET or DEFAULT_CLIENT_SECRET
+        token_uri = creds.token_uri or "https://oauth2.googleapis.com/token"
+
+        # Store credentials securely with fallback IDs for resilient refresh
         creds_data = {
             'token': creds.token,
             'refresh_token': refresh_token,
-            'token_uri': creds.token_uri,
-            'client_id': creds.client_id,
-            'client_secret': creds.client_secret,
+            'token_uri': token_uri,
+            'client_id': client_id,
+            'client_secret': client_secret,
             'scopes': list(creds.scopes) if creds.scopes else list(GMAIL_SCOPES),
         }
         encrypted = encrypt_credential(json.dumps(creds_data))
@@ -325,9 +335,15 @@ async def stop_monitoring(db: Session = Depends(get_db), user: m.User = Depends(
 async def sync_now(db: Session = Depends(get_db), user: m.User = Depends(get_current_user)):
     account = db.query(m.EmailAccount).filter_by(user_id=user.id).first()
     if not account or not account.connected:
-        raise HTTPException(status_code=400, detail="No connected email account.")
+        raise HTTPException(status_code=400, detail="No connected email account. Please connect an account first.")
     await email_monitor.sync_now(account.id)
-    return {"status": "sync_complete"}
+    db.refresh(account)
+    return {
+        "status": "sync_complete",
+        "last_sync_at": account.last_sync_at,
+        "emails_checked": account.emails_checked,
+        "attachments_analyzed": account.attachments_analyzed,
+    }
 
 
 from pydantic import BaseModel
@@ -337,7 +353,7 @@ class ImapConnectRequest(BaseModel):
     app_password: str
 
 @router.post("/connect-imap")
-def connect_imap(payload: ImapConnectRequest, db: Session = Depends(get_db), user: m.User = Depends(get_current_user)):
+async def connect_imap(payload: ImapConnectRequest, db: Session = Depends(get_db), user: m.User = Depends(get_current_user)):
     import imaplib
     email_addr = payload.email_address.strip()
     pwd = payload.app_password.replace(" ", "").strip()
@@ -374,4 +390,3 @@ def connect_imap(payload: ImapConnectRequest, db: Session = Depends(get_db), use
     db.commit()
     email_monitor.start_monitoring(account.id, account.poll_interval_seconds)
     return {"connected": True, "email_address": email_addr, "monitoring_active": True}
-

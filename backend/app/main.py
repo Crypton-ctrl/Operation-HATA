@@ -1,16 +1,19 @@
 """
 Operation HATA - FastAPI Application Entrypoint
 """
+import asyncio
 import logging
 import traceback
+from contextlib import asynccontextmanager
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from app.config import get_settings
-from app.database.session import Base, engine
+from app.database.session import Base, engine, SessionLocal
 from app.models import models  # noqa: F401 - ensures models are registered before create_all
 from app.services.ws_manager import manager
+from app.services import email_monitor
 
 from app.api import (
     scans, dashboard, emails, quarantine, notifications, settings as settings_api,
@@ -25,21 +28,25 @@ settings = get_settings()
 
 Base.metadata.create_all(bind=engine)
 
-from contextlib import asynccontextmanager
-from app.database.session import SessionLocal
-from app.services.email_monitor import start_monitoring
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    try:
+        loop = asyncio.get_running_loop()
+        email_monitor.set_event_loop(loop)
+    except Exception as e:
+        logger.warning(f"Could not bind main event loop to email_monitor: {e}")
+
     try:
         with SessionLocal() as db:
             accounts = db.query(models.EmailAccount).filter_by(monitoring_active=True).all()
             for account in accounts:
                 logger.info(f"Resuming email monitoring for {account.email_address}")
-                start_monitoring(account.id, account.poll_interval_seconds)
+                email_monitor.start_monitoring(account.id, account.poll_interval_seconds)
     except Exception as e:
         logger.error(f"Failed to resume monitoring: {e}")
     yield
+
 
 app = FastAPI(
     title="Operation HATA API",
