@@ -205,13 +205,22 @@ async def run_full_scan(db: Session, scan: m.Scan, file_path: Path, attachment: 
         await _emit(scan.id, "ai_assessment", "complete", {"ai_available": ai_report["ai_available"]})
 
         # --- Quarantine + notification for risky files ---
-        if risk["category"] in ("MEDIUM", "HIGH", "CRITICAL"):
-            db.add(m.QuarantineItem(
-                scan_id=scan.id, filename=attachment.original_filename, sha256=hashes.get("sha256"),
-                risk_category=risk["category"],
-                reason="; ".join(f["factor"] for f in risk["contributing_factors"][:4]) or "Elevated risk score",
-                user_id=scan.user_id,
-            ))
+        has_risk_factors = bool(risk.get("contributing_factors"))
+        is_quarantinable = (
+            risk["category"] in ("MEDIUM", "HIGH", "CRITICAL") or
+            (risk["category"] == "LOW" and has_risk_factors) or
+            risk["total_score"] >= 20
+        )
+        if is_quarantinable:
+            existing_q = db.query(m.QuarantineItem).filter_by(scan_id=scan.id).first()
+            if not existing_q:
+                db.add(m.QuarantineItem(
+                    scan_id=scan.id, filename=attachment.original_filename, sha256=hashes.get("sha256"),
+                    risk_category=risk["category"],
+                    reason="; ".join(f["factor"] for f in risk["contributing_factors"][:4]) or f"Detected security risk ({risk['total_score']}/100)",
+                    user_id=scan.user_id,
+                    status="quarantined",
+                ))
             severity = "critical" if risk["category"] == "CRITICAL" else ("high" if risk["category"] == "HIGH" else "medium")
             notif = m.Notification(
                 scan_id=scan.id,

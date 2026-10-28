@@ -3,23 +3,21 @@ import { useParams, Link } from 'react-router-dom'
 import {
   FileSignature, Fingerprint, Camera, Activity, EyeOff, FileWarning,
   ScanLine, TextSearch, QrCode, Globe2, BrainCircuit, Download, ArrowLeft,
+  Lock, ShieldAlert, CheckCircle2,
 } from 'lucide-react'
 import { LineChart, Line, XAxis, YAxis, ResponsiveContainer, Tooltip } from 'recharts'
-import { getScan, downloadPdfReport } from '../services/api.js'
+import { getScan, downloadPdfReport, manualQuarantine } from '../services/api.js'
 import RiskGauge from '../components/common/RiskGauge.jsx'
 import FindingCard from '../components/common/FindingCard.jsx'
 import { riskMeta } from '../utils/risk.js'
-
-function pill(status) {
-  // maps backend booleans/classifications into safe/suspicious/dangerous/not_detected
-  return status
-}
 
 export default function ScanResult() {
   const { scanId } = useParams()
   const [data, setData] = useState(null)
   const [error, setError] = useState(null)
   const [downloading, setDownloading] = useState(false)
+  const [quarantining, setQuarantining] = useState(false)
+  const [quarantineSuccess, setQuarantineSuccess] = useState(null)
 
   useEffect(() => {
     let cancelled = false
@@ -40,7 +38,7 @@ export default function ScanResult() {
   if (!data) return <div className="text-hata-muted text-sm">Loading scan results…</div>
 
   const { scan, attachment, email, signature, hashes, metadata, entropy, stego,
-          embedded, yara, ocr, qr, url_results, risk, ai_report } = data
+          embedded, yara, ocr, qr, url_results, risk, ai_report, quarantine_item } = data
 
   const meta = riskMeta(risk?.category || 'UNKNOWN')
 
@@ -51,19 +49,63 @@ export default function ScanResult() {
     setDownloading(false)
   }
 
+  const handleQuarantine = async () => {
+    setQuarantining(true)
+    setQuarantineSuccess(null)
+    try {
+      await manualQuarantine(scanId, 'Manually isolated by analyst from report view')
+      setQuarantineSuccess('File has been placed into Quarantine.')
+      const updated = await getScan(scanId)
+      setData(updated)
+    } catch (e) {
+      setError(e.message)
+    } finally {
+      setQuarantining(false)
+    }
+  }
+
+  const isQuarantined = quarantine_item && quarantine_item.status === 'quarantined'
+
   return (
     <div className="max-w-6xl mx-auto space-y-6">
       <div className="flex items-center justify-between flex-wrap gap-3">
         <Link to="/history" className="focus-ring inline-flex items-center gap-1.5 text-sm text-hata-muted hover:text-hata-text">
           <ArrowLeft className="w-4 h-4" /> Back to history
         </Link>
-        {scan.status === 'complete' && (
-          <button onClick={handleDownload} disabled={downloading}
-             className="focus-ring inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold bg-hata-accent text-hata-bg hover:bg-cyan-300 transition-colors disabled:opacity-50">
-            <Download className="w-4 h-4" /> {downloading ? 'Preparing PDF…' : 'Download PDF Report'}
-          </button>
-        )}
+        <div className="flex items-center gap-3">
+          {scan.status === 'complete' && (
+            <>
+              {isQuarantined ? (
+                <span className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-semibold bg-risk-high/15 text-risk-high border border-risk-high/30">
+                  <ShieldAlert className="w-4 h-4" /> Quarantined
+                </span>
+              ) : (
+                <button
+                  onClick={handleQuarantine}
+                  disabled={quarantining}
+                  className="focus-ring inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-semibold border border-risk-high/40 text-risk-high hover:bg-risk-high/10 transition-colors disabled:opacity-50"
+                  title="Immediately isolate this file in quarantine"
+                >
+                  <Lock className="w-3.5 h-3.5" />
+                  {quarantining ? 'Quarantining…' : 'Quarantine File'}
+                </button>
+              )}
+
+              <button onClick={handleDownload} disabled={downloading}
+                className="focus-ring inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold bg-hata-accent text-hata-bg hover:bg-cyan-300 transition-colors disabled:opacity-50">
+                <Download className="w-4 h-4" /> {downloading ? 'Preparing PDF…' : 'Download PDF Report'}
+              </button>
+            </>
+          )}
+        </div>
       </div>
+
+      {quarantineSuccess && (
+        <div className="flex items-center gap-2 p-3 text-xs rounded-lg bg-risk-safe/10 border border-risk-safe/30 text-risk-safe">
+          <CheckCircle2 className="w-4 h-4 shrink-0" />
+          <span>{quarantineSuccess} You can review or delete it anytime from the Quarantine view.</span>
+        </div>
+      )}
 
       {/* Main risk panel */}
       <div className={`glass rounded-2xl p-8 flex flex-col md:flex-row items-center gap-8 border ${meta.border}/30`}>
